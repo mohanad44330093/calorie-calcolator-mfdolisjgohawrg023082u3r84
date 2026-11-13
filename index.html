@@ -1,0 +1,607 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>body{margin:0}</style>
+<script>
+if(!window.claude){window.claude={use:async function(n){if(n!=='downloads')return null;return{save:async function(o){var b=o.data instanceof Blob?o.data:new Blob([o.data],{type:'text/plain'});var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},4000);}}}}}
+</script></head><body>
+<title>حاسبة النظام الغذائي</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: plan builder (days > meals > food rows) on the start side, sticky daily-totals card beside it on desktop,
+   compact totals bar pinned to the bottom on phones. Macro hues are fixed (protein blue, carbs amber, fat plum) and always paired with text labels. */
+:root {
+  --bg: #EEF3F9; --panel: #FFFFFF; --panel2: #F3F6FB; --fg: #0A1628; --muted: #536480; --line: #D3DCE8;
+  --accent: #0B6FD8; --accent-ink: #FFFFFF; --danger: #B3261E; --ok: #157347; --warn: #946200;
+  --cal: #0A1628; --pro: #0B6FD8; --car: #C77700; --fat: #A23B8F;
+  --usda: #157347; --rec: #0B6FD8; --est: #946200; --man: #536480;
+  --shadow: 0 1px 2px rgba(10,22,40,.06), 0 8px 24px rgba(10,22,40,.06);
+  --font: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #070D18; --panel: #0C192C; --panel2: #0F1F34; --fg: #F6F9FD; --muted: #9DB4D0; --line: #204C78;
+    --accent: #0099FF; --accent-ink: #04101F; --danger: #FF8A80; --ok: #5FD39A; --warn: #F5BE4C;
+    --cal: #F6F9FD; --pro: #4DB3FF; --car: #F5BE4C; --fat: #E58AD0;
+    --usda: #5FD39A; --rec: #4DB3FF; --est: #F5BE4C; --man: #9DB4D0; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #070D18; --panel: #0C192C; --panel2: #0F1F34; --fg: #F6F9FD; --muted: #9DB4D0; --line: #204C78;
+  --accent: #0099FF; --accent-ink: #04101F; --danger: #FF8A80; --ok: #5FD39A; --warn: #F5BE4C;
+  --cal: #F6F9FD; --pro: #4DB3FF; --car: #F5BE4C; --fat: #E58AD0;
+  --usda: #5FD39A; --rec: #4DB3FF; --est: #F5BE4C; --man: #9DB4D0; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.app { max-width: 1240px; margin: 0 auto; padding-block: 20px 90px; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0; font-weight: 800; text-wrap: balance; }
+h2 { font-size: 17px; margin: 0; font-weight: 700; }
+.lead { color: var(--muted); margin: 6px 0 0; max-width: 62ch; }
+.sub { color: var(--muted); font-size: 13px; }
+.top { margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; align-items: start; }
+@media (min-width: 1000px) { .grid { grid-template-columns: minmax(0,1fr) 360px; } .side { position: sticky; top: 16px; } }
+.col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+input[type=text], input[type=number], select, textarea { width: 100%; background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font: inherit; font-size: 15px; min-width: 0; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: 0; border-color: var(--accent); }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--line); background: var(--panel2); color: var(--fg); border-radius: 9px; padding: 7px 13px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.btn.ghost { background: transparent; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn.danger { color: var(--danger); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.ico { width: 32px; height: 32px; padding: 0; justify-content: center; flex: none; }
+.ico svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.banner { border: 1px dashed var(--accent); background: var(--panel2); border-radius: 12px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.banner p { margin: 0; font-size: 14px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tab { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 9px; padding: 6px 14px; font-weight: 700; font-size: 14px; }
+.tab[aria-selected=true] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.dayhead { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dayhead input { max-width: 240px; font-weight: 700; }
+.meal { border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mealhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mealhead input { flex: 1 1 160px; font-weight: 700; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12.5px; font-weight: 700; }
+.chip { display: inline-flex; gap: 4px; align-items: center; padding: 2px 8px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.d-cal { background: var(--cal); } .d-pro { background: var(--pro); } .d-car { background: var(--car); } .d-fat { background: var(--fat); }
+.items { display: flex; flex-direction: column; gap: 8px; }
+.item { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: grid; gap: 8px; grid-template-columns: minmax(0,1fr) 78px 150px; align-items: center; }
+.item .nm { position: relative; min-width: 0; }
+.item .res { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+.item .nums { display: flex; gap: 6px; flex-wrap: wrap; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.item .nums span { display: inline-flex; gap: 4px; align-items: center; }
+.item .acts { display: flex; gap: 4px; margin-inline-start: auto; }
+.badge { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.b-usda { color: var(--usda); } .b-rec { color: var(--rec); } .b-ai { color: var(--est); } .b-custom { color: var(--man); }
+.detail { grid-column: 1 / -1; font-size: 13px; color: var(--muted); background: var(--panel2); border-radius: 8px; padding: 8px 10px; line-height: 1.7; }
+.detail b { color: var(--fg); }
+.pick { position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.25); max-height: 340px; overflow: auto; }
+.opt { display: flex; flex-direction: column; gap: 1px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.opt:last-child { border-bottom: 0; }
+.opt[aria-selected=true], .opt:hover { background: var(--panel2); }
+.opt .t { font-weight: 700; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.opt .m { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.opt.act { color: var(--accent); font-weight: 700; }
+.sum .big { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.stat .l { font-size: 12.5px; color: var(--muted); font-weight: 700; display: flex; gap: 6px; align-items: center; }
+.stat .v { font-size: 26px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 13px; font-weight: 600; color: var(--muted); margin-inline-start: 3px; }
+.stat.main { grid-column: 1 / -1; }
+.stat.main .v { font-size: 34px; }
+.split { display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--panel2); border: 1px solid var(--line); margin-top: 6px; }
+.split i { display: block; height: 100%; }
+.splitl { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 700; margin-top: 6px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.tg { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.tg label { font-size: 12.5px; color: var(--muted); font-weight: 700; display: flex; flex-direction: column; gap: 3px; }
+.prog { height: 7px; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line); overflow: hidden; margin-top: 3px; }
+.prog i { display: block; height: 100%; background: var(--accent); }
+.prog.over i { background: var(--danger); }
+.tline { font-size: 12.5px; font-weight: 600; }
+.over-t { color: var(--danger); } .ok-t { color: var(--ok); }
+.note { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.mini { position: fixed; z-index: 15; inset-inline: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 8px max(12px, env(safe-area-inset-left, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; justify-content: space-between; box-shadow: 0 -8px 24px rgba(10,22,40,.1); }
+.mini div { flex: 1; text-align: center; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.mini b { display: block; font-size: 17px; }
+.mini span { font-size: 11.5px; color: var(--muted); font-weight: 700; }
+@media (min-width: 1000px) { .mini { display: none; } .app { padding-block-end: 30px; } }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.fields .wide { grid-column: 1 / -1; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; min-width: 0; }
+.ov { position: fixed; inset: 0; z-index: 40; background: rgba(4,8,16,.7); display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow: auto; }
+.ov[hidden] { display: none; }
+.modal { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel2); }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 6px 12px; font-weight: 700; font-size: 13px; }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); }
+.msg { font-size: 13px; min-height: 18px; margin: 0; }
+.msg.err { color: var(--danger); } .msg.ok { color: var(--ok); } .msg.warn { color: var(--warn); }
+.cust { display: flex; flex-direction: column; gap: 6px; }
+.crow { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.crow:last-child { border-bottom: 0; }
+.dtl summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 600px) { .item { grid-template-columns: 90px minmax(0,1fr); } .item .nm { grid-column: 1 / -1; } .stat .v { font-size: 22px; } }
+.btn { white-space: nowrap; } .btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+
+<div class="app" dir="rtl" lang="ar">
+  <header class="top">
+    <h1>حاسبة النظام الغذائي</h1>
+    <p class="lead">اكتب أي أكلة واختار الكمية، والصفحة تحسب السعرات والبروتين والكارب والدهون من قاعدة بيانات USDA الرسمية.</p>
+  </header>
+
+  <div class="grid">
+    <main class="col" id="main"></main>
+    <aside class="col side" id="side"></aside>
+  </div>
+</div>
+
+<div class="mini" id="mini" aria-label="ملخص اليوم"></div>
+
+<div class="ov" id="ov" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle" id="modal"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const FOODS = [{"id":"u05064","n":"صدر فراخ مطبوخ (مشوي/مسلوق)","g":"بروتين","al":"فراخ دجاج بانيه صدور chicken breast","k":165.0,"p":31.02,"f":3.57,"c":0.0,"fi":0.0,"u":[["نصف صدر",86,false]],"src":"USDA SR26 #05064","nt":"بدون جلد، الوزن بعد الطبخ"},{"id":"u05062","n":"صدر فراخ نيء","g":"بروتين","al":"فراخ دجاج صدور chicken breast raw","k":120.0,"p":22.5,"f":2.62,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #05062","nt":"بدون جلد، الوزن قبل الطبخ"},{"id":"u05060","n":"صدر فراخ بالجلد مطبوخ","g":"بروتين","al":"فراخ دجاج مشوي بالجلد chicken breast skin","k":197.0,"p":29.8,"f":7.78,"c":0.0,"fi":0.0,"u":[["نصف صدر",98,false]],"src":"USDA SR26 #05060","nt":"الوزن بعد الطبخ"},{"id":"u05098","n":"فخذ فراخ مطبوخ بدون جلد","g":"بروتين","al":"فراخ دجاج وراك ورك chicken thigh","k":179.0,"p":24.76,"f":8.15,"c":0.0,"fi":0.0,"u":[["فخذة",116,false]],"src":"USDA SR26 #05098","nt":"الوزن بعد الطبخ"},{"id":"u05096","n":"فخذ فراخ نيء بدون جلد","g":"بروتين","al":"فراخ دجاج وراك ورك chicken thigh raw","k":121.0,"p":19.66,"f":4.12,"c":0.0,"fi":0.0,"u":[["فخذة",193,false]],"src":"USDA SR26 #05096","nt":"الوزن قبل الطبخ"},{"id":"u05073","n":"دبوس فراخ مطبوخ بدون جلد","g":"بروتين","al":"فراخ دجاج دبابيس drumstick","k":155.0,"p":24.24,"f":5.7,"c":0.0,"fi":0.0,"u":[["دبوس",96,false]],"src":"USDA SR26 #05073","nt":"الوزن بعد الطبخ"},{"id":"u05103","n":"أجنحة فراخ مطبوخة بالجلد","g":"بروتين","al":"فراخ دجاج وينجز اجنحه wings","k":254.0,"p":23.79,"f":16.87,"c":0.0,"fi":0.0,"u":[["جناح",85,false]],"src":"USDA SR26 #05103","nt":"الوزن بعد الطبخ"},{"id":"u05028","n":"كبدة فراخ مطبوخة","g":"بروتين","al":"كبده فراخ دجاج chicken liver","k":167.0,"p":24.46,"f":6.51,"c":0.87,"fi":0.0,"u":[["حبة",44,false]],"src":"USDA SR26 #05028","nt":"الوزن بعد الطبخ"},{"id":"u05220","n":"صدر ديك رومي مطبوخ","g":"بروتين","al":"رومي تيركي turkey","k":147.0,"p":30.13,"f":2.08,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #05220","nt":"الوزن بعد الطبخ"},{"id":"u23562","n":"لحمة مفروم 90% خالية الدهن نيئة","g":"بروتين","al":"لحم مفروم كفتة كباب beef ground lean raw","k":176.0,"p":20.0,"f":10.0,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #23562","nt":"الوزن قبل الطبخ"},{"id":"u23563","n":"لحمة مفروم 90% مطبوخة (مشوية)","g":"بروتين","al":"لحم مفروم برجر كفتة beef ground","k":217.0,"p":26.11,"f":11.73,"c":0.0,"fi":0.0,"u":[["قرص برجر",82,false]],"src":"USDA SR26 #23563","nt":"الوزن بعد الطبخ"},{"id":"u23572","n":"لحمة مفروم 80/20 نيئة","g":"بروتين","al":"لحم مفروم كفتة beef ground raw","k":254.0,"p":17.17,"f":20.0,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #23572","nt":"الوزن قبل الطبخ"},{"id":"u23573","n":"لحمة مفروم 80/20 مطبوخة (مشوية)","g":"بروتين","al":"لحم مفروم برجر كفتة beef ground","k":271.0,"p":25.75,"f":17.82,"c":0.0,"fi":0.0,"u":[["قرص برجر",77,false]],"src":"USDA SR26 #23573","nt":"الوزن بعد الطبخ"},{"id":"u13451","n":"ستيك سيرلوين مطبوخ","g":"بروتين","al":"لحم بقري ستيك استيك beef sirloin steak","k":212.0,"p":29.33,"f":9.67,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #13451","nt":"بدهنه المقطوعة إلى 0، الوزن بعد الطبخ"},{"id":"u13439","n":"فيليه بقري (تندرلوين) مطبوخ","g":"بروتين","al":"لحم بقري فيليه ستيك beef tenderloin","k":211.0,"p":30.5,"f":8.91,"c":0.0,"fi":0.0,"u":[["ستيك",117,false]],"src":"USDA SR26 #13439","nt":"الوزن بعد الطبخ"},{"id":"u13326","n":"كبدة بقري مطبوخة","g":"بروتين","al":"كبده بقرى لحمة beef liver","k":191.0,"p":29.08,"f":5.26,"c":5.13,"fi":0.0,"u":[["شريحة",68,false]],"src":"USDA SR26 #13326","nt":"الوزن بعد الطبخ"},{"id":"u17012","n":"لحم ضاني (فخذة) مطبوخ","g":"بروتين","al":"خروف ضأن لحمة lamb leg","k":258.0,"p":25.55,"f":16.48,"c":0.0,"fi":0.0,"u":[],"src":"USDA SR26 #17012","nt":"لحم ودهن، الوزن بعد الطبخ"},{"id":"u01129","n":"بيض مسلوق","g":"بروتين","al":"بيضه بيض egg boiled","k":155.0,"p":12.58,"f":10.61,"c":1.12,"fi":0.0,"u":[["بيضة كبيرة",50,false]],"src":"USDA SR26 #01129","nt":null},{"id":"u01123","n":"بيض نيء (كامل)","g":"بروتين","al":"بيضه بيض egg raw","k":143.0,"p":12.56,"f":9.51,"c":0.72,"fi":0.0,"u":[["بيضة كبيرة",50,false],["بيضة وسط",44,false]],"src":"USDA SR26 #01123","nt":null},{"id":"u01128","n":"بيض مقلي","g":"بروتين","al":"بيضه بيض عيون egg fried","k":196.0,"p":13.61,"f":14.84,"c":0.83,"fi":0.0,"u":[["بيضة",46,false]],"src":"USDA SR26 #01128","nt":"مقلي بزيت كما في بيانات USDA"},{"id":"u01124","n":"بياض بيض نيء","g":"بروتين","al":"بياض البيض egg white","k":52.0,"p":10.9,"f":0.17,"c":0.73,"fi":0.0,"u":[["بياض بيضة",33,false]],"src":"USDA SR26 #01124","nt":null},{"id":"u01125","n":"صفار بيض نيء","g":"بروتين","al":"صفار البيض egg yolk","k":322.0,"p":15.86,"f":26.54,"c":3.59,"fi":0.0,"u":[["صفار بيضة",17,false]],"src":"USDA SR26 #01125","nt":null},{"id":"u15121","n":"تونة بالماء (مصفاة)","g":"بروتين","al":"تونه tuna in water","k":86.0,"p":19.44,"f":0.96,"c":0.0,"fi":0.0,"u":[["علبة",165,false]],"src":"USDA SR26 #15121","nt":"بعد التصفية من الماء"},{"id":"u15119","n":"تونة بالزيت (مصفاة)","g":"بروتين","al":"تونه tuna in oil","k":198.0,"p":29.13,"f":8.21,"c":0.0,"fi":0.0,"u":[["علبة",171,false]],"src":"USDA SR26 #15119","nt":"بعد التصفية من الزيت"},{"id":"u15262","n":"سمك بلطي مطبوخ","g":"بروتين","al":"بلطى سمك tilapia","k":128.0,"p":26.15,"f":2.65,"c":0.0,"fi":0.0,"u":[["فيليه",87,false]],"src":"USDA SR26 #15262","nt":"الوزن بعد الطبخ"},{"id":"u15237","n":"سلمون مطبوخ","g":"بروتين","al":"سالمون سمك salmon","k":206.0,"p":22.1,"f":12.35,"c":0.0,"fi":0.0,"u":[["نصف فيليه",178,false]],"src":"USDA SR26 #15237","nt":"الوزن بعد الطبخ"},{"id":"u15047","n":"ماكريل (أسقمري) مطبوخ","g":"بروتين","al":"اسقمري ماكريل سمك mackerel","k":262.0,"p":23.85,"f":17.81,"c":0.0,"fi":0.0,"u":[["فيليه",88,false]],"src":"USDA SR26 #15047","nt":"الوزن بعد الطبخ"},{"id":"u15088","n":"سردين معلب بالزيت","g":"بروتين","al":"سردين sardine","k":208.0,"p":24.62,"f":11.45,"c":0.0,"fi":0.0,"u":[["علبة",92,false]],"src":"USDA SR26 #15088","nt":"بالعظم بعد التصفية"},{"id":"u15151","n":"جمبري مطبوخ","g":"بروتين","al":"جمبري قريدس shrimp","k":119.0,"p":22.78,"f":1.7,"c":1.52,"fi":0.0,"u":[["4 جمبري كبير",22,false]],"src":"USDA SR26 #15151","nt":"الوزن بعد الطبخ"},{"id":"u15092","n":"سمك قاروص مطبوخ","g":"بروتين","al":"قاروص سي باس سمك sea bass","k":124.0,"p":23.63,"f":2.56,"c":0.0,"fi":0.0,"u":[["فيليه",101,false]],"src":"USDA SR26 #15092","nt":"الوزن بعد الطبخ"},{"id":"u15056","n":"سمك بوري مطبوخ","g":"بروتين","al":"بورى سمك mullet","k":150.0,"p":24.81,"f":4.86,"c":0.0,"fi":0.0,"u":[["فيليه",93,false]],"src":"USDA SR26 #15056","nt":"الوزن بعد الطبخ"},{"id":"u01077","n":"لبن كامل الدسم","g":"ألبان","al":"حليب لبن milk whole","k":61.0,"p":3.15,"f":3.25,"c":4.8,"fi":0.0,"u":[["كوب (244جم)",244,false]],"src":"USDA SR26 #01077","nt":null},{"id":"u01079","n":"لبن نص دسم (2%)","g":"ألبان","al":"حليب لبن milk 2%","k":50.0,"p":3.3,"f":1.98,"c":4.8,"fi":0.0,"u":[["كوب (244جم)",244,false]],"src":"USDA SR26 #01079","nt":null},{"id":"u01085","n":"لبن خالي الدسم","g":"ألبان","al":"حليب لبن سكيم milk skim","k":34.0,"p":3.37,"f":0.08,"c":4.96,"fi":0.0,"u":[["كوب (245جم)",245,false]],"src":"USDA SR26 #01085","nt":null},{"id":"u01230","n":"لبن رائب كامل","g":"ألبان","al":"روب لبن رايب buttermilk","k":62.0,"p":3.21,"f":3.31,"c":4.88,"fi":0.0,"u":[],"src":"USDA SR26 #01230","nt":null},{"id":"u01116","n":"زبادي كامل الدسم","g":"ألبان","al":"زبادى يوغورت yogurt","k":61.0,"p":3.47,"f":3.25,"c":4.66,"fi":0.0,"u":[["علبة صغيرة (170جم)",170,false],["كوب (245جم)",245,false]],"src":"USDA SR26 #01116","nt":null},{"id":"u01117","n":"زبادي قليل الدسم","g":"ألبان","al":"زبادى يوغورت yogurt low fat","k":63.0,"p":5.25,"f":1.55,"c":7.04,"fi":0.0,"u":[["علبة صغيرة (170جم)",170,false],["كوب (245جم)",245,false]],"src":"USDA SR26 #01117","nt":null},{"id":"u01256","n":"زبادي يوناني خالي الدسم","g":"ألبان","al":"زبادى يوناني greek yogurt","k":59.0,"p":10.19,"f":0.39,"c":3.6,"fi":0.0,"u":[["علبة (170جم)",170,false]],"src":"USDA SR26 #01256","nt":null},{"id":"u01019","n":"جبنة بيضاء (فيتا)","g":"ألبان","al":"جبنه بيضا دمياطي feta white cheese","k":264.0,"p":14.21,"f":21.28,"c":4.09,"fi":0.0,"u":[["قطعة (38جم)",38,false]],"src":"USDA SR26 #01019","nt":"أقرب صنف في USDA للجبنة البيضاء المصرية؛ النسب تختلف حسب النوع والملح"},{"id":"u01015","n":"جبنة قريش (كوتيدج 2%)","g":"ألبان","al":"قريش جبنة cottage","k":86.0,"p":11.83,"f":2.45,"c":3.66,"fi":0.0,"u":[["كوب (226جم)",226,false]],"src":"USDA SR26 #01015","nt":"أقرب صنف في USDA للجبنة القريش"},{"id":"u01028","n":"جبنة موتزاريلا (نصف دسمة)","g":"ألبان","al":"موزاريلا mozzarella","k":254.0,"p":24.26,"f":15.92,"c":2.77,"fi":0.0,"u":[["شريحة/قطعة 28جم",28.35,false]],"src":"USDA SR26 #01028","nt":null},{"id":"u01009","n":"جبنة شيدر","g":"ألبان","al":"شيدر شرائح cheddar","k":403.0,"p":24.9,"f":33.14,"c":1.28,"fi":0.0,"u":[["شريحة/قطعة 28جم",28.35,false]],"src":"USDA SR26 #01009","nt":null},{"id":"u01038","n":"جبنة رومي (رومانو)","g":"ألبان","al":"رومى جبنة romano","k":387.0,"p":31.8,"f":26.94,"c":3.63,"fi":0.0,"u":[["شريحة/قطعة 28جم",28.35,false]],"src":"USDA SR26 #01038","nt":"أقرب صنف في USDA للجبنة الرومي"},{"id":"u01017","n":"جبنة كريمي (كريم تشيز)","g":"ألبان","al":"كريمي كريم شيز cream cheese","k":342.0,"p":5.93,"f":34.24,"c":4.07,"fi":0.0,"u":[["ملعقة كبيرة",14.5,false]],"src":"USDA SR26 #01017","nt":null},{"id":"u01042","n":"جبنة مطبوخة/مثلثات","g":"ألبان","al":"مثلثات جبنه processed cheese","k":366.0,"p":18.13,"f":30.71,"c":4.78,"fi":0.0,"u":[["شريحة/قطعة 28جم",28.35,false]],"src":"USDA SR26 #01042","nt":"تقريبي؛ الملصق أدق لأن العلامات التجارية تختلف"},{"id":"u20051","n":"رز أبيض مطبوخ","g":"نشويات وبقوليات","al":"ارز رز مسلوق rice cooked","k":130.0,"p":2.38,"f":0.21,"c":28.59,"fi":0.3,"u":[["كوب (186جم)",186,false]],"src":"USDA SR26 #20051","nt":"الوزن بعد الطبخ"},{"id":"u20044","n":"رز أبيض نيء","g":"نشويات وبقوليات","al":"ارز رز rice raw","k":365.0,"p":7.13,"f":0.66,"c":79.95,"fi":1.3,"u":[["كوب (185جم)",185,false]],"src":"USDA SR26 #20044","nt":"الوزن قبل الطبخ"},{"id":"u20037","n":"رز بني مطبوخ","g":"نشويات وبقوليات","al":"ارز رز اسمر brown rice","k":111.0,"p":2.58,"f":0.9,"c":22.96,"fi":1.8,"u":[["كوب (195جم)",195,false]],"src":"USDA SR26 #20037","nt":"الوزن بعد الطبخ"},{"id":"u20121","n":"مكرونة مسلوقة","g":"نشويات وبقوليات","al":"معكرونه باستا اسباجتي macaroni pasta spaghetti cooked","k":158.0,"p":5.8,"f":0.93,"c":30.86,"fi":1.8,"u":[["كوب (140جم)",140,false]],"src":"USDA SR26 #20121","nt":"الوزن بعد السلق"},{"id":"u20099","n":"مكرونة جافة (نيئة)","g":"نشويات وبقوليات","al":"معكرونه باستا شعريه macaroni pasta dry","k":371.0,"p":13.04,"f":1.51,"c":74.67,"fi":3.2,"u":[],"src":"USDA SR26 #20099","nt":"الوزن قبل السلق"},{"id":"u08120","n":"شوفان جاف","g":"نشويات وبقوليات","al":"اوتس oats","k":379.0,"p":13.15,"f":6.52,"c":67.7,"fi":10.1,"u":[["كوب (81جم)",81,false],["ثلث كوب (27جم)",27,false]],"src":"USDA SR26 #08120","nt":"الوزن قبل الطبخ"},{"id":"u08121","n":"شوفان مطبوخ بالماء","g":"نشويات وبقوليات","al":"اوتس oatmeal cooked","k":71.0,"p":2.54,"f":1.52,"c":12.0,"fi":1.7,"u":[["كوب (234جم)",234,false]],"src":"USDA SR26 #08121","nt":"الوزن بعد الطبخ"},{"id":"u20013","n":"برغل مطبوخ","g":"نشويات وبقوليات","al":"برغل bulgur","k":83.0,"p":3.08,"f":0.24,"c":18.58,"fi":4.5,"u":[["كوب (182جم)",182,false]],"src":"USDA SR26 #20013","nt":"الوزن بعد الطبخ"},{"id":"u20029","n":"كسكسي مطبوخ","g":"نشويات وبقوليات","al":"كسكس couscous","k":112.0,"p":3.79,"f":0.16,"c":23.22,"fi":1.4,"u":[["كوب (157جم)",157,false]],"src":"USDA SR26 #20029","nt":"الوزن بعد الطبخ"},{"id":"u20137","n":"كينوا مطبوخة","g":"نشويات وبقوليات","al":"كينوا quinoa","k":120.0,"p":4.4,"f":1.92,"c":21.3,"fi":2.8,"u":[["كوب (185جم)",185,false]],"src":"USDA SR26 #20137","nt":"الوزن بعد الطبخ"},{"id":"u18042","n":"عيش بلدي (قمح كامل)","g":"نشويات وبقوليات","al":"خبز عيش بلدى رغيف whole wheat pita baladi bread","k":266.0,"p":9.8,"f":2.6,"c":55.0,"fi":7.4,"u":[["رغيف بلدي كبير (~90جم)",90,true],["نصف رغيف بلدي (~45جم)",45,true]],"src":"USDA SR26 #18042","nt":"قيمة تقريبية من الخبز العربي بالقمح الكامل؛ وزن الرغيف يختلف، الأدق الوزن بالجرام"},{"id":"u18041","n":"عيش شامي أبيض","g":"نشويات وبقوليات","al":"خبز عيش شامى بيتا pita white","k":275.0,"p":9.1,"f":1.2,"c":55.7,"fi":2.2,"u":[["رغيف كبير (60جم)",60,false]],"src":"USDA SR26 #18041","nt":null},{"id":"u18069","n":"توست أبيض","g":"نشويات وبقوليات","al":"خبز توست white bread","k":265.0,"p":9.15,"f":3.19,"c":49.06,"fi":2.7,"u":[["شريحة (28جم)",28,false]],"src":"USDA SR26 #18069","nt":null},{"id":"u18075","n":"توست قمح كامل (أسمر)","g":"نشويات وبقوليات","al":"خبز توست اسمر whole wheat bread","k":252.0,"p":12.45,"f":3.5,"c":42.71,"fi":6.0,"u":[["شريحة (32جم)",32,false]],"src":"USDA SR26 #18075","nt":null},{"id":"u08020","n":"كورن فليكس","g":"نشويات وبقوليات","al":"كورن فلكس cornflakes cereal","k":357.0,"p":7.5,"f":0.4,"c":84.1,"fi":3.3,"u":[["كوب (28جم)",28,false]],"src":"USDA SR26 #08020","nt":null},{"id":"u20081","n":"دقيق أبيض","g":"نشويات وبقوليات","al":"طحين دقيق flour","k":364.0,"p":10.33,"f":0.98,"c":76.31,"fi":2.7,"u":[["كوب (125جم)",125,false]],"src":"USDA SR26 #20081","nt":null},{"id":"u20080","n":"دقيق أسمر (قمح كامل)","g":"نشويات وبقوليات","al":"طحين دقيق whole wheat flour","k":340.0,"p":13.21,"f":2.5,"c":71.97,"fi":10.7,"u":[["كوب (120جم)",120,false]],"src":"USDA SR26 #20080","nt":null},{"id":"u11367","n":"بطاطس مسلوقة","g":"نشويات وبقوليات","al":"بطاطا بطاطس potato boiled","k":86.0,"p":1.71,"f":0.1,"c":20.01,"fi":1.8,"u":[["حبة وسط (167جم)",167,false],["حبة صغيرة (125جم)",125,false]],"src":"USDA SR26 #11367","nt":"بدون قشر"},{"id":"u11357","n":"بطاطس مشوية بقشرها","g":"نشويات وبقوليات","al":"بطاطا بطاطس potato baked","k":94.0,"p":2.1,"f":0.15,"c":21.08,"fi":2.1,"u":[["حبة وسط (173جم)",173,false]],"src":"USDA SR26 #11357","nt":null},{"id":"u11508","n":"بطاطا حلوة مشوية","g":"نشويات وبقوليات","al":"بطاطا عسلي حلوه sweet potato","k":90.0,"p":2.01,"f":0.15,"c":20.71,"fi":3.3,"u":[["حبة وسط (114جم)",114,false],["حبة كبيرة (180جم)",180,false]],"src":"USDA SR26 #11508","nt":null},{"id":"u11403","n":"بطاطس محمرة (مجمدة، فرن)","g":"نشويات وبقوليات","al":"بطاطس فرايز شيبسي french fries","k":164.0,"p":2.66,"f":5.22,"c":27.74,"fi":2.8,"u":[["10 أصابع (50جم)",50,false]],"src":"USDA SR26 #11403","nt":"مجمدة مسخنة في الفرن، المقلية في زيت تزيد دهنها"},{"id":"u11168","n":"ذرة مسلوقة","g":"نشويات وبقوليات","al":"درة ذره corn boiled","k":96.0,"p":3.41,"f":1.5,"c":20.98,"fi":2.4,"u":[["كوز وسط (103جم)",103,false]],"src":"USDA SR26 #11168","nt":null},{"id":"u16070","n":"عدس مسلوق","g":"نشويات وبقوليات","al":"عدس lentils","k":116.0,"p":9.02,"f":0.38,"c":20.13,"fi":7.9,"u":[["كوب (198جم)",198,false]],"src":"USDA SR26 #16070","nt":"الوزن بعد السلق"},{"id":"u16069","n":"عدس نيء","g":"نشويات وبقوليات","al":"عدس lentils raw","k":343.0,"p":25.8,"f":1.06,"c":60.08,"fi":30.5,"u":[["كوب (192جم)",192,false]],"src":"USDA SR26 #16069","nt":"الوزن قبل السلق"},{"id":"u16057","n":"حمص مسلوق","g":"نشويات وبقوليات","al":"حمص الشام chickpeas","k":164.0,"p":8.86,"f":2.59,"c":27.42,"fi":7.6,"u":[["كوب (164جم)",164,false]],"src":"USDA SR26 #16057","nt":"الوزن بعد السلق"},{"id":"u16056","n":"حمص نيء","g":"نشويات وبقوليات","al":"حمص chickpeas raw","k":364.0,"p":19.3,"f":6.04,"c":60.65,"fi":17.4,"u":[["كوب (200جم)",200,false]],"src":"USDA SR26 #16056","nt":"الوزن قبل السلق"},{"id":"u16137","n":"حمص بالطحينة (مطبوخ منزلي)","g":"نشويات وبقوليات","al":"حمص شام بالطحينه hummus","k":177.0,"p":4.86,"f":8.59,"c":20.12,"fi":4.0,"u":[["ملعقة كبيرة",15,false]],"src":"USDA SR26 #16137","nt":null},{"id":"u16053","n":"فول مسلوق ساده","g":"نشويات وبقوليات","al":"فول مدمس فول حراتي fava broad beans plain","k":110.0,"p":7.6,"f":0.4,"c":19.65,"fi":5.4,"u":[["كوب (170جم)",170,false]],"src":"USDA SR26 #16053","nt":"فول بدون زيت أو إضافات، الوزن بعد الطبخ"},{"id":"u16050","n":"فاصوليا بيضاء مسلوقة","g":"نشويات وبقوليات","al":"فاصوليا بيضه white beans","k":139.0,"p":9.73,"f":0.35,"c":25.09,"fi":6.3,"u":[["كوب (179جم)",179,false]],"src":"USDA SR26 #16050","nt":"الوزن بعد السلق"},{"id":"u11192","n":"لوبيا مسلوقة","g":"نشويات وبقوليات","al":"لوبيا cowpeas","k":97.0,"p":3.17,"f":0.38,"c":20.32,"fi":5.0,"u":[["كوب (165جم)",165,false]],"src":"USDA SR26 #11192","nt":"الوزن بعد السلق"},{"id":"u11305","n":"بسلة مطبوخة","g":"نشويات وبقوليات","al":"بازلاء بسله peas","k":84.0,"p":5.36,"f":0.22,"c":15.63,"fi":5.5,"u":[["كوب (160جم)",160,false]],"src":"USDA SR26 #11305","nt":null},{"id":"u16138","n":"طعمية (فلافل) مقلية","g":"نشويات وبقوليات","al":"فلافل falafel taameya","k":333.0,"p":13.31,"f":17.8,"c":31.84,"fi":0.0,"u":[["قرص (17جم)",17,false]],"src":"USDA SR26 #16138","nt":"من بيانات الفلافل (حمص) في USDA، والطعمية المصرية بالفول قريبة منها لكن ليست مطابقة"},{"id":"u11529","n":"طماطم","g":"خضار","al":"طماطم بندورة tomato","k":18.0,"p":0.88,"f":0.2,"c":3.89,"fi":1.2,"u":[["حبة كبيرة (182جم)",182,false],["حبة صغيرة (62جم)",62,false]],"src":"USDA SR26 #11529","nt":null},{"id":"u11205","n":"خيار بالقشر","g":"خضار","al":"خيار cucumber","k":15.0,"p":0.65,"f":0.11,"c":3.63,"fi":0.5,"u":[["حبة (301جم)",301,false]],"src":"USDA SR26 #11205","nt":null},{"id":"u11251","n":"خس","g":"خضار","al":"خس روماني lettuce","k":17.0,"p":1.23,"f":0.3,"c":3.29,"fi":2.1,"u":[["كوب (47جم)",47,false]],"src":"USDA SR26 #11251","nt":null},{"id":"u11124","n":"جزر","g":"خضار","al":"جزر carrot","k":41.0,"p":0.93,"f":0.24,"c":9.58,"fi":2.8,"u":[["حبة وسط (61جم)",61,false]],"src":"USDA SR26 #11124","nt":null},{"id":"u11282","n":"بصل نيء","g":"خضار","al":"بصل onion","k":40.0,"p":1.1,"f":0.1,"c":9.34,"fi":1.7,"u":[["حبة كبيرة (150جم)",150,false]],"src":"USDA SR26 #11282","nt":null},{"id":"u11333","n":"فلفل أخضر","g":"خضار","al":"فلفل رومي green pepper","k":20.0,"p":0.86,"f":0.17,"c":4.64,"fi":1.7,"u":[["حبة وسط (119جم)",119,false]],"src":"USDA SR26 #11333","nt":null},{"id":"u11821","n":"فلفل أحمر","g":"خضار","al":"فلفل رومي احمر red pepper","k":31.0,"p":0.99,"f":0.3,"c":6.03,"fi":2.1,"u":[["حبة وسط (119جم)",119,false]],"src":"USDA SR26 #11821","nt":null},{"id":"u11477","n":"كوسة نيئة","g":"خضار","al":"كوسه zucchini","k":17.0,"p":1.21,"f":0.32,"c":3.11,"fi":1.0,"u":[["حبة وسط (196جم)",196,false]],"src":"USDA SR26 #11477","nt":null},{"id":"u11210","n":"باذنجان مطبوخ","g":"خضار","al":"باذنجان بتنجان eggplant","k":35.0,"p":0.83,"f":0.23,"c":8.73,"fi":2.5,"u":[["كوب (99جم)",99,false]],"src":"USDA SR26 #11210","nt":"مسلوق بدون زيت"},{"id":"u11457","n":"سبانخ نيئة","g":"خضار","al":"سبانخ spinach","k":23.0,"p":2.86,"f":0.39,"c":3.63,"fi":2.2,"u":[["كوب (30جم)",30,false]],"src":"USDA SR26 #11457","nt":null},{"id":"u11458","n":"سبانخ مطبوخة","g":"خضار","al":"سبانخ spinach cooked","k":23.0,"p":2.97,"f":0.26,"c":3.75,"fi":2.4,"u":[["كوب (180جم)",180,false]],"src":"USDA SR26 #11458","nt":null},{"id":"u11091","n":"بروكلي مسلوق","g":"خضار","al":"بروكلى broccoli","k":35.0,"p":2.38,"f":0.41,"c":7.18,"fi":3.3,"u":[["كوب (156جم)",156,false]],"src":"USDA SR26 #11091","nt":null},{"id":"u11136","n":"قرنبيط مسلوق","g":"خضار","al":"قرنبيط كرنب زهرة cauliflower","k":23.0,"p":1.84,"f":0.45,"c":4.11,"fi":2.3,"u":[["كوب (124جم)",124,false]],"src":"USDA SR26 #11136","nt":null},{"id":"u11109","n":"كرنب نيء","g":"خضار","al":"كرنب cabbage","k":25.0,"p":1.28,"f":0.1,"c":5.8,"fi":2.5,"u":[["كوب مقطع (89جم)",89,false]],"src":"USDA SR26 #11109","nt":null},{"id":"u11279","n":"بامية مسلوقة","g":"خضار","al":"بامية okra","k":22.0,"p":1.87,"f":0.21,"c":4.51,"fi":2.5,"u":[["8 قرون (85جم)",85,false]],"src":"USDA SR26 #11279","nt":"مسلوقة بدون زيت"},{"id":"u11053","n":"فاصوليا خضراء مسلوقة","g":"خضار","al":"فاصوليا خضرا green beans","k":35.0,"p":1.89,"f":0.28,"c":7.88,"fi":3.2,"u":[["كوب (125جم)",125,false]],"src":"USDA SR26 #11053","nt":null},{"id":"u11232","n":"ملوخية مسلوقة (ورق)","g":"خضار","al":"ملوخيه jute molokhia","k":37.0,"p":3.68,"f":0.2,"c":7.29,"fi":2.0,"u":[["كوب (87جم)",87,false]],"src":"USDA SR26 #11232","nt":"الورق المسلوق فقط بدون تقلية أو مرق"},{"id":"u11519","n":"قلقاس مطبوخ","g":"خضار","al":"قلقاس taro","k":142.0,"p":0.52,"f":0.11,"c":34.6,"fi":5.1,"u":[["كوب (132جم)",132,false]],"src":"USDA SR26 #11519","nt":null},{"id":"u11423","n":"قرع مطبوخ","g":"خضار","al":"قرع عسلي pumpkin","k":20.0,"p":0.72,"f":0.07,"c":4.9,"fi":1.1,"u":[["كوب (245جم)",245,false]],"src":"USDA SR26 #11423","nt":null},{"id":"u11215","n":"ثوم","g":"خضار","al":"تومه garlic","k":149.0,"p":6.36,"f":0.5,"c":33.06,"fi":2.1,"u":[["فص (3جم)",3,false]],"src":"USDA SR26 #11215","nt":null},{"id":"u11260","n":"مشروم","g":"خضار","al":"عيش الغراب فطر mushroom","k":22.0,"p":3.09,"f":0.34,"c":3.26,"fi":1.0,"u":[["كوب (70جم)",70,false]],"src":"USDA SR26 #11260","nt":null},{"id":"u11429","n":"فجل","g":"خضار","al":"فجل radish","k":16.0,"p":0.68,"f":0.1,"c":3.4,"fi":1.6,"u":[],"src":"USDA SR26 #11429","nt":null},{"id":"u11297","n":"بقدونس","g":"خضار","al":"بقدونس parsley","k":36.0,"p":2.97,"f":0.79,"c":6.33,"fi":3.3,"u":[["ملعقة كبيرة",3.8,false]],"src":"USDA SR26 #11297","nt":null},{"id":"u11081","n":"بنجر مسلوق","g":"خضار","al":"بنجر شمندر beet","k":44.0,"p":1.68,"f":0.18,"c":9.96,"fi":2.0,"u":[["حبتين (100جم)",100,false]],"src":"USDA SR26 #11081","nt":null},{"id":"u11959","n":"جرجير","g":"خضار","al":"جرجير arugula rocket","k":25.0,"p":2.58,"f":0.66,"c":3.65,"fi":1.6,"u":[["نصف كوب (10جم)",10,false]],"src":"USDA SR26 #11959","nt":null},{"id":"u09193","n":"زيتون أسود معلب","g":"خضار","al":"زيتون olives black","k":115.0,"p":0.84,"f":10.68,"c":6.26,"fi":3.2,"u":[["زيتونة كبيرة (4.4جم)",4.4,false]],"src":"USDA SR26 #09193","nt":null},{"id":"u09195","n":"زيتون أخضر معلب","g":"خضار","al":"زيتون olives green","k":145.0,"p":1.03,"f":15.32,"c":3.84,"fi":3.3,"u":[["زيتونة (2.7جم)",2.7,false]],"src":"USDA SR26 #09195","nt":null},{"id":"u11549","n":"صلصة طماطم معلبة","g":"خضار","al":"صلصه طماطم tomato sauce","k":24.0,"p":1.32,"f":0.18,"c":5.38,"fi":1.5,"u":[["كوب (245جم)",245,false]],"src":"USDA SR26 #11549","nt":null},{"id":"u11546","n":"معجون طماطم","g":"خضار","al":"صلصه معجون tomato paste","k":82.0,"p":4.32,"f":0.47,"c":18.91,"fi":4.1,"u":[["ملعقة كبيرة",16,false]],"src":"USDA SR26 #11546","nt":null},{"id":"u09040","n":"موز","g":"فاكهة","al":"موزة banana","k":89.0,"p":1.09,"f":0.33,"c":22.84,"fi":2.6,"u":[["حبة وسط (118جم)",118,false],["حبة صغيرة (101جم)",101,false]],"src":"USDA SR26 #09040","nt":"وزن الثمرة بدون القشر"},{"id":"u09003","n":"تفاح بالقشر","g":"فاكهة","al":"تفاحة apple","k":52.0,"p":0.26,"f":0.17,"c":13.81,"fi":2.4,"u":[["حبة وسط (182جم)",182,false]],"src":"USDA SR26 #09003","nt":null},{"id":"u09200","n":"برتقال","g":"فاكهة","al":"برتقانة orange","k":47.0,"p":0.94,"f":0.12,"c":11.75,"fi":2.4,"u":[["حبة (131جم)",131,false]],"src":"USDA SR26 #09200","nt":null},{"id":"u09176","n":"مانجو","g":"فاكهة","al":"مانجا mango","k":60.0,"p":0.82,"f":0.38,"c":14.98,"fi":1.6,"u":[["كوب مقطع (165جم)",165,false]],"src":"USDA SR26 #09176","nt":null},{"id":"u09132","n":"عنب","g":"فاكهة","al":"عنب grapes","k":69.0,"p":0.72,"f":0.16,"c":18.1,"fi":0.9,"u":[["كوب (151جم)",151,false]],"src":"USDA SR26 #09132","nt":null},{"id":"u09326","n":"بطيخ","g":"فاكهة","al":"بطيخ watermelon","k":30.0,"p":0.61,"f":0.15,"c":7.55,"fi":0.4,"u":[["كوب مقطع (152جم)",152,false],["شريحة كبيرة (286جم)",286,false]],"src":"USDA SR26 #09326","nt":null},{"id":"u09316","n":"فراولة","g":"فاكهة","al":"فراوله strawberry","k":32.0,"p":0.67,"f":0.3,"c":7.68,"fi":2.0,"u":[["كوب (144جم)",144,false]],"src":"USDA SR26 #09316","nt":null},{"id":"u09087","n":"بلح دقلة نور","g":"فاكهة","al":"تمر بلح dates deglet","k":282.0,"p":2.45,"f":0.39,"c":75.03,"fi":8.0,"u":[["حبة (7جم)",7.1,false]],"src":"USDA SR26 #09087","nt":null},{"id":"u09421","n":"بلح مجهول (مجدول)","g":"فاكهة","al":"تمر بلح dates medjool","k":277.0,"p":1.81,"f":0.15,"c":74.97,"fi":6.7,"u":[["حبة (24جم)",24,false]],"src":"USDA SR26 #09421","nt":null},{"id":"u09089","n":"تين طازج","g":"فاكهة","al":"تين figs","k":74.0,"p":0.75,"f":0.3,"c":19.18,"fi":2.9,"u":[["حبة وسط (50جم)",50,false]],"src":"USDA SR26 #09089","nt":null},{"id":"u09094","n":"تين مجفف","g":"فاكهة","al":"تين مجفف dried figs","k":249.0,"p":3.3,"f":0.93,"c":63.87,"fi":9.8,"u":[["حبة (8.4جم)",8.4,false]],"src":"USDA SR26 #09094","nt":null},{"id":"u09139","n":"جوافة","g":"فاكهة","al":"جوافه guava","k":68.0,"p":2.55,"f":0.95,"c":14.32,"fi":5.4,"u":[["حبة (55جم)",55,false]],"src":"USDA SR26 #09139","nt":null},{"id":"u09286","n":"رمان","g":"فاكهة","al":"رمان pomegranate","k":83.0,"p":1.67,"f":1.17,"c":18.7,"fi":4.0,"u":[["نصف كوب حب (87جم)",87,false]],"src":"USDA SR26 #09286","nt":null},{"id":"u09236","n":"خوخ","g":"فاكهة","al":"خوخه peach","k":39.0,"p":0.91,"f":0.25,"c":9.54,"fi":1.5,"u":[["حبة وسط (150جم)",150,false]],"src":"USDA SR26 #09236","nt":null},{"id":"u09252","n":"كمثرى","g":"فاكهة","al":"كمتري إجاص pear","k":57.0,"p":0.36,"f":0.14,"c":15.23,"fi":3.1,"u":[["حبة وسط (178جم)",178,false]],"src":"USDA SR26 #09252","nt":null},{"id":"u09181","n":"كانتالوب","g":"فاكهة","al":"شمام cantaloupe melon","k":34.0,"p":0.84,"f":0.19,"c":8.16,"fi":0.9,"u":[["كوب (156جم)",156,false]],"src":"USDA SR26 #09181","nt":null},{"id":"u09021","n":"مشمش","g":"فاكهة","al":"مشمش apricot","k":48.0,"p":1.4,"f":0.39,"c":11.12,"fi":2.0,"u":[["حبة (35جم)",35,false]],"src":"USDA SR26 #09021","nt":null},{"id":"u09218","n":"يوسفي","g":"فاكهة","al":"مندلينا يوسف افندي tangerine mandarin","k":53.0,"p":0.81,"f":0.31,"c":13.34,"fi":1.8,"u":[["حبة وسط (88جم)",88,false]],"src":"USDA SR26 #09218","nt":null},{"id":"u09148","n":"كيوي","g":"فاكهة","al":"كيوى kiwi","k":61.0,"p":1.14,"f":0.52,"c":14.66,"fi":3.0,"u":[["حبة (69جم)",69,false]],"src":"USDA SR26 #09148","nt":null},{"id":"u09266","n":"أناناس","g":"فاكهة","al":"اناناس pineapple","k":50.0,"p":0.54,"f":0.12,"c":13.12,"fi":1.4,"u":[["كوب (165جم)",165,false]],"src":"USDA SR26 #09266","nt":null},{"id":"u09050","n":"توت أزرق","g":"فاكهة","al":"بلوبيري blueberry","k":57.0,"p":0.74,"f":0.33,"c":14.49,"fi":2.4,"u":[["كوب (148جم)",148,false]],"src":"USDA SR26 #09050","nt":null},{"id":"u09298","n":"زبيب","g":"فاكهة","al":"زبيب raisins","k":299.0,"p":3.07,"f":0.46,"c":79.18,"fi":3.7,"u":[["علبة صغيرة (43جم)",43,false]],"src":"USDA SR26 #09298","nt":null},{"id":"u09037","n":"أفوكادو","g":"فاكهة","al":"افوكادو avocado","k":160.0,"p":2.0,"f":14.66,"c":8.53,"fi":6.7,"u":[["حبة (201جم)",201,false]],"src":"USDA SR26 #09037","nt":null},{"id":"u09206","n":"عصير برتقال طبيعي","g":"فاكهة","al":"عصير برتقال orange juice","k":45.0,"p":0.7,"f":0.2,"c":10.4,"fi":0.2,"u":[["كوب (248جم)",248,false]],"src":"USDA SR26 #09206","nt":null},{"id":"u09152","n":"عصير ليمون","g":"فاكهة","al":"ليمون lemon juice","k":22.0,"p":0.35,"f":0.24,"c":6.9,"fi":0.3,"u":[["ليمونة (48جم)",48,false]],"src":"USDA SR26 #09152","nt":null},{"id":"u04053","n":"زيت زيتون","g":"دهون ومكسرات","al":"زيت olive oil","k":884.0,"p":0.0,"f":100.0,"c":0.0,"fi":0.0,"u":[["ملعقة كبيرة",13.5,false],["ملعقة صغيرة",4.5,false]],"src":"USDA SR26 #04053","nt":null},{"id":"u04060","n":"زيت عباد الشمس","g":"دهون ومكسرات","al":"زيت sunflower oil","k":884.0,"p":0.0,"f":100.0,"c":0.0,"fi":0.0,"u":[["ملعقة كبيرة",13.6,false],["ملعقة صغيرة",4.5,false]],"src":"USDA SR26 #04060","nt":null},{"id":"u01001","n":"زبدة","g":"دهون ومكسرات","al":"زبده butter","k":717.0,"p":0.85,"f":81.11,"c":0.06,"fi":0.0,"u":[["ملعقة كبيرة",14.2,false],["قطعة صغيرة (5جم)",5,false]],"src":"USDA SR26 #01001","nt":null},{"id":"u01003","n":"سمنة بلدي (زبدة مصفاة)","g":"دهون ومكسرات","al":"سمن سمنه ghee butter oil","k":876.0,"p":0.28,"f":99.48,"c":0.0,"fi":0.0,"u":[["ملعقة كبيرة",12.8,false]],"src":"USDA SR26 #01003","nt":"قريبة جدًا من السمن البلدي الحقيقي، السمن النباتي غير مشمول"},{"id":"u04025","n":"مايونيز","g":"دهون ومكسرات","al":"مايونيز mayonnaise","k":680.0,"p":0.96,"f":74.85,"c":0.57,"fi":0.0,"u":[["ملعقة كبيرة",14.7,false]],"src":"USDA SR26 #04025","nt":"مايونيز عادي بالزيت"},{"id":"u12166","n":"طحينة","g":"دهون ومكسرات","al":"طحينه tahini","k":595.0,"p":17.0,"f":53.76,"c":21.19,"fi":9.3,"u":[["ملعقة كبيرة",15,false]],"src":"USDA SR26 #12166","nt":null},{"id":"u16098","n":"زبدة فول سوداني","g":"دهون ومكسرات","al":"زبده فول سوداني peanut butter","k":588.0,"p":25.09,"f":50.39,"c":19.56,"fi":6.0,"u":[["ملعقتان كبيرتان (32جم)",32,false]],"src":"USDA SR26 #16098","nt":null},{"id":"u12061","n":"لوز","g":"دهون ومكسرات","al":"لوز almonds","k":579.0,"p":21.15,"f":49.93,"c":21.55,"fi":12.5,"u":[["حفنة (28جم)",28.35,false]],"src":"USDA SR26 #12061","nt":null},{"id":"u16087","n":"فول سوداني نيء","g":"دهون ومكسرات","al":"سوداني peanuts","k":567.0,"p":25.8,"f":49.24,"c":16.13,"fi":8.5,"u":[["حفنة (28جم)",28.35,false]],"src":"USDA SR26 #16087","nt":null},{"id":"u12155","n":"عين جمل (جوز)","g":"دهون ومكسرات","al":"عين الجمل جوز walnuts","k":654.0,"p":15.23,"f":65.21,"c":13.71,"fi":6.7,"u":[["كوب نصوص (100جم)",100,false]],"src":"USDA SR26 #12155","nt":null},{"id":"u12151","n":"فستق","g":"دهون ومكسرات","al":"فستق pistachio","k":562.0,"p":20.27,"f":45.39,"c":27.51,"fi":10.3,"u":[["حفنة (28جم)",28.35,false]],"src":"USDA SR26 #12151","nt":null},{"id":"u12087","n":"كاجو","g":"دهون ومكسرات","al":"كاجو cashew","k":553.0,"p":18.22,"f":43.85,"c":30.19,"fi":3.3,"u":[["حفنة (28جم)",28.35,false]],"src":"USDA SR26 #12087","nt":null},{"id":"u12120","n":"بندق","g":"دهون ومكسرات","al":"بندق hazelnuts","k":628.0,"p":14.95,"f":60.75,"c":16.7,"fi":9.7,"u":[["10 حبات (14جم)",14,false]],"src":"USDA SR26 #12120","nt":null},{"id":"u12036","n":"لب عباد الشمس","g":"دهون ومكسرات","al":"لب سوري عباد شمس sunflower seeds","k":584.0,"p":20.78,"f":51.46,"c":20.0,"fi":8.6,"u":[],"src":"USDA SR26 #12036","nt":null},{"id":"u12023","n":"سمسم","g":"دهون ومكسرات","al":"سمسم sesame seeds","k":573.0,"p":17.73,"f":49.67,"c":23.45,"fi":11.8,"u":[["ملعقة كبيرة",9,false]],"src":"USDA SR26 #12023","nt":null},{"id":"u12220","n":"بذور كتان","g":"دهون ومكسرات","al":"كتان flax seeds","k":534.0,"p":18.29,"f":42.16,"c":28.88,"fi":27.3,"u":[["ملعقة كبيرة",10.3,false]],"src":"USDA SR26 #12220","nt":null},{"id":"u12006","n":"بذور شيا","g":"دهون ومكسرات","al":"شيا chia seeds","k":486.0,"p":16.54,"f":30.74,"c":42.12,"fi":34.4,"u":[],"src":"USDA SR26 #12006","nt":null},{"id":"u12104","n":"جوز هند طازج","g":"دهون ومكسرات","al":"جوز الهند coconut","k":354.0,"p":3.33,"f":33.49,"c":15.23,"fi":9.0,"u":[["قطعة (45جم)",45,false]],"src":"USDA SR26 #12104","nt":null},{"id":"u19335","n":"سكر أبيض","g":"سكريات ومشروبات","al":"سكر sugar","k":387.0,"p":0.0,"f":0.0,"c":99.98,"fi":0.0,"u":[["ملعقة صغيرة",4.2,false],["كوب (200جم)",200,false]],"src":"USDA SR26 #19335","nt":null},{"id":"u19296","n":"عسل نحل","g":"سكريات ومشروبات","al":"عسل honey","k":304.0,"p":0.3,"f":0.0,"c":82.4,"fi":0.2,"u":[["ملعقة كبيرة",21,false]],"src":"USDA SR26 #19296","nt":"عسل النحل الطبيعي"},{"id":"u19904","n":"شوكولاتة داكنة (70-85%)","g":"سكريات ومشروبات","al":"شوكولاته دارك chocolate dark","k":598.0,"p":7.79,"f":42.63,"c":45.9,"fi":10.9,"u":[["مربع 28جم",28.35,false]],"src":"USDA SR26 #19904","nt":null},{"id":"u19120","n":"شوكولاتة بالحليب","g":"سكريات ومشروبات","al":"شوكولاته milk chocolate","k":535.0,"p":7.65,"f":29.66,"c":59.4,"fi":3.4,"u":[["لوح صغير (44جم)",44,false]],"src":"USDA SR26 #19120","nt":null},{"id":"u14400","n":"كوكاكولا/بيبسي عادي","g":"سكريات ومشروبات","al":"كولا بيبسي مشروب غازي cola soda","k":37.0,"p":0.07,"f":0.02,"c":9.56,"fi":0.0,"u":[["علبة (368جم)",368,false]],"src":"USDA SR26 #14400","nt":null},{"id":"u14355","n":"شاي أسود (بدون سكر)","g":"سكريات ومشروبات","al":"شاى tea","k":1.0,"p":0.0,"f":0.0,"c":0.3,"fi":0.0,"u":[["كوب (237جم)",237,false]],"src":"USDA SR26 #14355","nt":"بدون سكر أو لبن"},{"id":"u14209","n":"قهوة سوداء (بدون سكر)","g":"سكريات ومشروبات","al":"قهوه coffee","k":1.0,"p":0.12,"f":0.02,"c":0.0,"fi":0.0,"u":[["كوب (237جم)",237,false]],"src":"USDA SR26 #14209","nt":"بدون سكر أو لبن"},{"id":"u19411","n":"شيبسي (رقائق بطاطس)","g":"سكريات ومشروبات","al":"شيبس chips potato","k":542.0,"p":6.56,"f":36.4,"c":50.81,"fi":4.4,"u":[["كيس صغير 28جم",28.35,false]],"src":"USDA SR26 #19411","nt":null},{"id":"u21224","n":"بيتزا جبنة مجمدة (مطبوخة)","g":"سكريات ومشروبات","al":"بيتزا pizza","k":268.0,"p":10.36,"f":12.28,"c":29.02,"fi":2.2,"u":[["قطعة (81جم)",81,false]],"src":"USDA SR26 #21224","nt":"تقريبي، المحلات تختلف كثيرًا"},{"id":"u01095","n":"لبن مكثف محلى","g":"سكريات ومشروبات","al":"لبن مكثف عسل condensed milk","k":321.0,"p":7.91,"f":8.7,"c":54.4,"fi":0.0,"u":[["ملعقة كبيرة (~19جم)",19,true]],"src":"USDA SR26 #01095","nt":null},{"id":"u14066","n":"بروتين واي (مسحوق)","g":"مكملات","al":"واي بروتين whey protein powder","k":352.0,"p":78.13,"f":1.56,"c":6.25,"fi":3.1,"u":[["سكوب (30جم)",30,true]],"src":"USDA SR26 #14066","nt":"تقديري؛ كل ماركة لها قيم مختلفة، الأدق قراءة ملصق المنتج"},{"id":"e0","n":"كشري مصري","g":"أكلات مصرية","al":"كشرى كشري koshari","k":143.95,"p":4.67,"f":3.54,"c":23.36,"fi":2.75,"u":[["طبق (400جم)",400,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية قياسية: أرز، مكرونة، عدس، حمص، بصل محمّر، صلصة. الأطباق تختلف حسب كمية الزيت والصلصة","rc":{"ing":[["رز أبيض مطبوخ",120],["مكرونة مسلوقة",110],["عدس مسلوق",70],["حمص مسلوق",30],["بصل نيء",25],["USDA Commodity Food",8],["صلصة طماطم معلبة",40],["USDA Commodity Food",4]],"y":407}},{"id":"e1","n":"فول مدمس بالزيت والليمون","g":"أكلات مصرية","al":"فول مدمس بالزيت foul medames ful","k":145.29,"p":7.0,"f":5.28,"c":18.29,"fi":4.98,"u":[["طبق (200جم)",200,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية: 150 جم فول + ملعقة زيت زيتون + عصير ليمون","rc":{"ing":[["فول مسلوق ساده",150],["زيت زيتون",8],["عصير ليمون",5]],"y":163}},{"id":"e2","n":"أرز بالشعرية","g":"أكلات مصرية","al":"رز بالشعريه rice vermicelli","k":150.88,"p":2.63,"f":3.29,"c":26.94,"fi":0.51,"u":[["طبق (200جم)",200,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية: 100 جم أرز نيء + 12 جم شعرية + 10 جم زيت ينتجون حوالي 330 جم أرز مطبوخ","rc":{"ing":[["رز أبيض نيء",100],["مكرونة جافة (نيئة)",12],["USDA Commodity Food",10]],"y":330}},{"id":"e3","n":"مكرونة بالصلصة","g":"أكلات مصرية","al":"مكرونه صلصه pasta tomato sauce","k":144.15,"p":4.66,"f":3.0,"c":24.42,"fi":1.69,"u":[["طبق (250جم)",250,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية: 200 جم مكرونة مسلوقة + 60 جم صلصة + 6 جم زيت","rc":{"ing":[["مكرونة مسلوقة",200],["صلصة طماطم معلبة",60],["USDA Commodity Food",6]],"y":266}},{"id":"e4","n":"ملوخية بالتقلية","g":"أكلات مصرية","al":"ملوخيه تقليه molokhia","k":77.48,"p":3.61,"f":4.55,"c":7.81,"fi":1.92,"u":[["طبق (200جم)",200,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية بدون مرق أو لحم؛ مرق الفراخ أو اللحمة يزيد القيم","rc":{"ing":[["ملوخية مسلوقة (ورق)",85],["ثوم",3],["USDA Commodity Food",4]],"y":92}},{"id":"e5","n":"كفتة مشوية","g":"أكلات مصرية","al":"كفته كفتة kofta","k":252.44,"p":23.82,"f":16.42,"c":0.69,"fi":0.17,"u":[["سيخ (50جم)",50,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"وصفة تقديرية: لحم مفروم 80/20 مطبوخ مع بصل وبقدونس","rc":{"ing":[["لحمة مفروم 80/20 مطبوخة (مشوية)",92],["بصل نيء",6],["بقدونس",2]],"y":100}},{"id":"e6","n":"سلطة خضراء (بدون زيت)","g":"أكلات مصرية","al":"سلطه خيار طماطم خس salad","k":18.9,"p":0.86,"f":0.19,"c":4.23,"fi":1.26,"u":[["طبق (200جم)",200,true]],"src":"وصفة محسوبة من بيانات USDA","nt":"خيار + طماطم + خس + جزر، بدون زيت أو ليمون أو صلصة","rc":{"ing":[["خيار بالقشر",40],["طماطم",30],["خس",20],["جزر",10]],"y":100}}];
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nd = s => String(s).replace(/[٠-٩]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x660 + 48)).replace(/[۰-۹]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x6F0 + 48)).replace(/٫/g, '.').replace(/،/g, ',');
+const num = v => { const x = parseFloat(nd(v).replace(',', '.')); return isFinite(x) && x >= 0 ? x : NaN; };
+const norm = s => nd(String(s).toLowerCase()).replace(/[ً-ْـ]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/[^\p{L}\p{N}\s.%]/gu, ' ').replace(/\s+/g, ' ').trim();
+const stripAl = w => (w.length > 3 && w.startsWith('ال')) ? w.slice(2) : w;
+const f1 = n => (Math.round(n * 10) / 10).toFixed(1);
+const f0 = n => String(Math.round(n));
+let idc = 0; const uid = () => 'i' + (++idc) + Math.random().toString(36).slice(2, 6);
+const svg = {
+  x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>'
+};
+
+/* ---------- food index ---------- */
+const BASE = FOODS.map(f => Object.assign({ kind: f.id[0] === 'u' ? 'usda' : 'recipe' }, f));
+function withIdx(f) { f._n = norm(f.n); f._w = f._n.split(' ').map(stripAl); f._a = norm(f.al || '').split(' ').map(stripAl).join(' '); return f; }
+BASE.forEach(withIdx);
+
+/* ---------- state ---------- */
+const KEY = 'diet-calc-v1';
+const mk = (fid, q, u) => ({ id: uid(), fid, q, u });
+function sampleState() {
+  const byName = n => (BASE.find(f => f.n.startsWith(n)) || {}).id;
+  const d = (name, meals) => ({ id: uid(), name, meals });
+  const m = (name, items) => ({ id: uid(), name, items: items.filter(i => i.fid) });
+  return {
+    sample: true, plan: '', client: '', active: 0, targets: { k: '', p: '', c: '', f: '' }, custom: [],
+    days: [d('اليوم 1', [
+      m('الفطار', [mk(byName('بيض مسلوق'), 3, 0), mk(byName('عيش بلدي'), 1, 0), mk(byName('جبنة قريش'), 100, -1), mk(byName('طماطم'), 1, 0)]),
+      m('الغداء', [mk(byName('صدر فراخ مطبوخ'), 200, -1), mk(byName('رز أبيض مطبوخ'), 200, -1), mk(byName('سلطة خضراء'), 150, -1), mk(byName('زيت زيتون'), 1, 0)]),
+      m('سناك', [mk(byName('زبادي يوناني'), 1, 0), mk(byName('موز'), 1, 0), mk(byName('لوز'), 20, -1)]),
+      m('العشاء', [mk(byName('تونة بالماء'), 1, 0), mk(byName('توست قمح كامل'), 2, 0), mk(byName('خيار'), 1, 0)])
+    ])]
+  };
+}
+function load() { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && Array.isArray(s.days) && s.days.length) return s; } catch (e) {} return null; }
+let S = load() || sampleState();
+S.custom = (S.custom || []); S.targets = S.targets || { k: '', p: '', c: '', f: '' }; S.active = Math.min(S.active || 0, S.days.length - 1);
+S.custom.forEach(withIdx);
+let saveT = 0; const persist = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S, (k, v) => k[0] === '_' ? undefined : v)); } catch (e) {} }, 400); };
+const allFoods = () => BASE.concat(S.custom);
+const foodById = id => BASE.find(f => f.id === id) || S.custom.find(f => f.id === id) || null;
+
+/* ---------- math ---------- */
+function unitOf(food, it) { return it.u >= 0 && food && food.u && food.u[it.u] ? food.u[it.u] : null; }
+function gramsOf(food, it) { const q = num(it.q); if (!food || !isFinite(q)) return 0; const u = unitOf(food, it); return q * (u ? u[1] : 1); }
+function macrosOf(food, it) { const g = gramsOf(food, it), r = g / 100; return food ? { g, k: food.k * r, p: food.p * r, c: food.c * r, f: food.f * r, fi: (food.fi || 0) * r } : { g: 0, k: 0, p: 0, c: 0, f: 0, fi: 0 }; }
+const zero = () => ({ g: 0, k: 0, p: 0, c: 0, f: 0, fi: 0 });
+const add = (a, b) => { for (const k in a) a[k] += b[k]; return a; };
+function mealTotal(m) { const t = zero(); m.items.forEach(it => add(t, macrosOf(foodById(it.fid), it))); return t; }
+function dayTotal(d) { const t = zero(); d.meals.forEach(m => add(t, mealTotal(m))); return t; }
+const day = () => S.days[S.active];
+
+/* ---------- search ---------- */
+function search(q) {
+  const parsed = parseQuery(q); const toks = norm(parsed.text).split(' ').filter(Boolean).map(stripAl);
+  if (!toks.length) return [];
+  const out = [];
+  for (const f of allFoods()) {
+    let score = 0, ok = true;
+    for (const t of toks) {
+      if (f._w.some(w => w === t)) score += 60;
+      else if (f._w.some(w => w.startsWith(t))) score += 45;
+      else if (f._n.includes(t)) score += 25;
+      else if (f._a.includes(t)) score += 10;
+      else { ok = false; break; }
+    }
+    if (ok) { if (f._n.startsWith(toks[0])) score += 20; if (f.kind === 'custom' || f.kind === 'ai') score += 5; out.push([score - f.n.length * 0.05, f]); }
+  }
+  return out.sort((a, b) => b[0] - a[0]).slice(0, 8).map(x => x[1]);
+}
+/* "200 رز" or "2 بيض" or "150 جم صدر فراخ" */
+function parseQuery(q) {
+  const m = nd(q).trim().match(/^(\d+(?:\.\d+)?)\s*(جم|جرام|غ|g|gm)?\s+(.+)$/i);
+  if (!m) return { text: q, qty: null, grams: false };
+  return { text: m[3], qty: parseFloat(m[1]), grams: !!m[2] };
+}
+
+/* ---------- rendering ---------- */
+const kindBadge = f => ({ usda: ['USDA', 'b-usda'], recipe: ['وصفة محسوبة', 'b-rec'], ai: ['تقدير Claude', 'b-ai'], custom: ['إدخال يدوي', 'b-custom'] }[f.kind] || ['', '']);
+const chipsHtml = t => `<span class="chip"><i class="dot d-cal"></i>${f0(t.k)} سعرة</span><span class="chip"><i class="dot d-pro"></i>بروتين ${f1(t.p)}</span><span class="chip"><i class="dot d-car"></i>كارب ${f1(t.c)}</span><span class="chip"><i class="dot d-fat"></i>دهون ${f1(t.f)}</span>`;
+function unitOptions(food, it) {
+  const o = [`<option value="-1" ${it.u < 0 ? 'selected' : ''}>جرام</option>`];
+  (food && food.u || []).forEach((u, i) => o.push(`<option value="${i}" ${it.u === i ? 'selected' : ''}>${esc(u[0])}${u[2] ? ' ~' : ''}</option>`));
+  return o.join('');
+}
+function itemHtml(m, it) {
+  const f = it.fid ? foodById(it.fid) : null;
+  const t = macrosOf(f, it);
+  const [bl, bc] = f ? kindBadge(f) : ['', ''];
+  return `<div class="item" data-meal="${m.id}" data-item="${it.id}">
+    <div class="nm"><input type="text" id="n-${it.id}" data-k="name" value="${f ? esc(f.n) : ''}" placeholder="اكتب اسم الأكلة (مثال: صدر فراخ، رز، 3 بيض)" autocomplete="off" role="combobox" aria-expanded="false" aria-label="اسم الأكلة"></div>
+    <input type="text" inputmode="decimal" id="q-${it.id}" data-k="q" value="${esc(it.q)}" placeholder="الكمية" aria-label="الكمية" ${f ? '' : 'disabled'}>
+    <select id="u-${it.id}" data-k="u" aria-label="الوحدة" ${f ? '' : 'disabled'}>${unitOptions(f, it)}</select>
+    <div class="res">
+      <div class="nums" data-nums>${f ? numsHtml(t, f, it) : '<span class="sub">اختار أكلة من القائمة</span>'}</div>
+      <div class="acts">${f ? `<span class="badge ${bc}">${bl}</span><button type="button" class="btn ghost ico" data-act="info" aria-label="تفاصيل الأكلة">${svg.info}</button>` : ''}<button type="button" class="btn ghost ico danger" data-act="del-item" aria-label="حذف الأكلة">${svg.x}</button></div>
+    </div>
+    ${it._open && f ? detailHtml(f) : ''}
+  </div>`;
+}
+function numsHtml(t, f, it) {
+  const q = num(it.q); const bad = !isFinite(q) ? '<span class="over-t">اكتب كمية صحيحة</span>' : '';
+  return `${bad}<span><i class="dot d-cal"></i>${f0(t.k)} سعرة</span><span><i class="dot d-pro"></i>بروتين ${f1(t.p)}</span><span><i class="dot d-car"></i>كارب ${f1(t.c)}</span><span><i class="dot d-fat"></i>دهون ${f1(t.f)}</span><span class="sub">(${f1(t.g)} جم)</span>`;
+}
+function detailHtml(f) {
+  let h = `<div class="detail"><b>لكل 100 جرام:</b> ${f0(f.k)} سعرة · بروتين ${f1(f.p)} · كارب ${f1(f.c)} · دهون ${f1(f.f)}${f.fi ? ' · ألياف ' + f1(f.fi) : ''}<br><b>المصدر:</b> ${esc(f.src || '')}`;
+  if (f.nt) h += `<br><b>ملاحظة:</b> ${esc(f.nt)}`;
+  if (f.rc) h += `<br><b>المكونات (إجمالي ${f.rc.y} جم مطبوخ):</b> ${f.rc.ing.map(i => esc(i[0]) + ' ' + i[1] + ' جم').join('، ')}`;
+  return h + '</div>';
+}
+function mealHtml(m) {
+  return `<section class="meal" data-meal="${m.id}" aria-label="${esc(m.name)}">
+    <div class="mealhead">
+      <input type="text" id="mn-${m.id}" data-k="mname" value="${esc(m.name)}" aria-label="اسم الوجبة" placeholder="اسم الوجبة">
+      <button type="button" class="btn ghost ico danger" data-act="del-meal" aria-label="حذف الوجبة">${svg.x}</button>
+    </div>
+    <div class="chips" data-mchips>${chipsHtml(mealTotal(m))}</div>
+    <div class="items">${m.items.map(it => itemHtml(m, it)).join('')}</div>
+    <div><button type="button" class="btn small" data-act="add-item">+ أكلة</button></div>
+  </section>`;
+}
+function renderMain() {
+  const d = day();
+  $('main').innerHTML = `
+    ${S.sample ? `<div class="banner" role="note"><p>ده يوم تجريبي علشان تشوف الحساب. امسحه وابدأ نظامك.</p><button type="button" class="btn small" data-act="clear">مسح وابدأ نظام جديد</button></div>` : ''}
+    <section class="card">
+      <div class="head"><h2>بيانات النظام</h2></div>
+      <div class="fields">
+        <label class="f">اسم النظام (اختياري)<input type="text" id="plan" data-top="plan" value="${esc(S.plan)}" placeholder="مثال: تنشيف 2000 سعرة" autocomplete="off"></label>
+        <label class="f">اسم العميل (اختياري)<input type="text" id="client" data-top="client" value="${esc(S.client)}" autocomplete="off"></label>
+      </div>
+    </section>
+    <section class="card">
+      <div class="head"><h2>الأيام والوجبات</h2>
+        <div class="tabs" role="tablist" aria-label="الأيام">
+          ${S.days.map((x, i) => `<button type="button" class="tab" role="tab" aria-selected="${i === S.active}" data-act="tab" data-i="${i}">${esc(x.name || 'يوم ' + (i + 1))}</button>`).join('')}
+          <button type="button" class="btn small" data-act="add-day" ${S.days.length >= 14 ? 'disabled' : ''}>+ يوم</button>
+        </div>
+      </div>
+      <div class="dayhead">
+        <input type="text" id="dn" data-k="dname" value="${esc(d.name)}" aria-label="اسم اليوم">
+        <button type="button" class="btn small" data-act="dup-day" ${S.days.length >= 14 ? 'disabled' : ''}>نسخ اليوم</button>
+        <button type="button" class="btn small danger" data-act="del-day" ${S.days.length <= 1 ? 'disabled' : ''}>حذف اليوم</button>
+      </div>
+      <div class="col" style="margin-top:12px" id="meals">${d.meals.map(mealHtml).join('') || '<p class="sub">لسه مفيش وجبات. ضيف وجبة.</p>'}</div>
+      <div style="margin-top:12px"><button type="button" class="btn" data-act="add-meal">+ وجبة</button></div>
+    </section>
+    <section class="card">
+      <div class="head"><h2>أكلاتي</h2><button type="button" class="btn small" data-act="new-food">+ أكلة جديدة</button></div>
+      <p class="note" style="margin:0 0 8px">لو الأكلة مش في القاعدة، ضيفها من ملصق المنتج أو اطلب تقدير من Claude. بتظهر في البحث تحت اسمها.</p>
+      <div class="cust" id="cust">${S.custom.map(c => `<div class="crow"><span><b>${esc(c.n)}</b> <span class="badge ${kindBadge(c)[1]}">${kindBadge(c)[0]}</span><br><span class="sub">100 جم: ${f0(c.k)} سعرة · ب ${f1(c.p)} · ك ${f1(c.c)} · د ${f1(c.f)}</span></span><button type="button" class="btn ghost ico danger" data-act="del-custom" data-id="${c.id}" aria-label="حذف ${esc(c.n)}">${svg.x}</button></div>`).join('') || '<p class="sub" style="margin:0">لسه مضفتش أكلات.</p>'}</div>
+      <p class="msg" id="cmsg" role="status"></p>
+    </section>
+    <section class="card">
+      <details class="dtl"><summary>إزاي الأرقام دي بتتحسب؟</summary>
+        <p class="note">الأرقام من قاعدة بيانات وزارة الزراعة الأمريكية (USDA SR26) لكل 100 جرام، والحساب = القيمة × (الوزن ÷ 100). السعرات مأخوذة من القاعدة كما هي، ولا تُحسب بقاعدة 4/4/9، علشان الألياف والخضار لهم معاملات طاقة مختلفة.<br>
+        <b>مطبوخ / نيء:</b> الوزن لازم يطابق الحالة المكتوبة في الاسم. الأكل بعد الطبخ بيفقد ماء أو بيمتص زيت، فلو وزنته نيء اختار الصنف «نيء».<br>
+        <b>وصفة محسوبة:</b> الأكلات المصرية المركبة (كشري، فول...) محسوبة من مكوناتها بأوزان ظاهرة في التفاصيل. الأطباق في البيوت والمطاعم بتختلف، فاعتبرها تقريبية.<br>
+        <b>الوحدات اللي عليها (~):</b> أوزان تقريبية، والأدق الوزن بالجرام.<br>
+        <b>تقدير Claude:</b> مجرد تقدير وليس قياس معملي. راجع الأرقام قبل الاعتماد عليها، وعدّلها لو عندك ملصق المنتج.</p>
+      </details>
+    </section>`;
+}
+function dayTargetsBlock(t) {
+  const rows = [['k', 'السعرات', 'سعرة', 'cal'], ['p', 'البروتين', 'جم', 'pro'], ['c', 'الكارب', 'جم', 'car'], ['f', 'الدهون', 'جم', 'fat']];
+  return rows.map(([k, l, u, cls]) => {
+    const tv = num(S.targets[k]); const cur = k === 'k' ? t.k : t[k]; const has = isFinite(tv) && tv > 0;
+    const pct = has ? Math.min(100, cur / tv * 100) : 0; const diff = has ? cur - tv : 0; const over = has && diff > 0;
+    return `<div data-tg="${k}"><label class="f" style="margin-bottom:0">${l} المستهدف (${u})<input type="text" inputmode="decimal" id="tg-${k}" data-tgt="${k}" value="${esc(S.targets[k])}" placeholder="—"></label>${has ? `<div class="prog ${over ? 'over' : ''}"><i style="width:${pct}%"></i></div><div class="tline ${over ? 'over-t' : 'ok-t'}">${over ? 'زيادة ' + f0(diff) : 'باقي ' + f0(-diff)} ${u}</div>` : ''}</div>`;
+  }).join('');
+}
+function renderSide() {
+  const t = dayTotal(day());
+  const kP = t.p * 4, kC = t.c * 4, kF = t.f * 9, tot = kP + kC + kF || 1;
+  $('side').innerHTML = `
+    <section class="card sum" aria-label="إجمالي اليوم">
+      <div class="head"><h2>إجمالي ${esc(day().name || 'اليوم')}</h2></div>
+      <div class="big">
+        <div class="stat main"><div class="l"><i class="dot d-cal"></i>السعرات الحرارية</div><div class="v" id="tk">${f0(t.k)}<small>سعرة</small></div></div>
+        <div class="stat"><div class="l"><i class="dot d-pro"></i>البروتين</div><div class="v" id="tp">${f1(t.p)}<small>جم</small></div></div>
+        <div class="stat"><div class="l"><i class="dot d-car"></i>الكارب</div><div class="v" id="tc">${f1(t.c)}<small>جم</small></div></div>
+        <div class="stat"><div class="l"><i class="dot d-fat"></i>الدهون</div><div class="v" id="tf">${f1(t.f)}<small>جم</small></div></div>
+        <div class="stat"><div class="l">الألياف</div><div class="v" id="tfi">${f1(t.fi)}<small>جم</small></div></div>
+      </div>
+      <div style="margin-top:12px"><div class="sub" style="font-weight:700">توزيع السعرات (من الماكروز)</div>
+        <div class="split" id="split" role="img" aria-label="توزيع السعرات بين البروتين والكارب والدهون"><i style="width:${kP / tot * 100}%;background:var(--pro)"></i><i style="width:${kC / tot * 100}%;background:var(--car)"></i><i style="width:${kF / tot * 100}%;background:var(--fat)"></i></div>
+        <div class="splitl" id="splitl"><span style="color:var(--pro)">بروتين ${f0(kP / tot * 100)}%</span><span style="color:var(--car)">كارب ${f0(kC / tot * 100)}%</span><span style="color:var(--fat)">دهون ${f0(kF / tot * 100)}%</span></div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="head"><h2>الهدف اليومي</h2></div>
+      <div class="tg" id="targets">${dayTargetsBlock(t)}</div>
+    </section>
+    <section class="card">
+      <div class="head"><h2>تصدير</h2></div>
+      <div class="dayhead"><button type="button" class="btn" data-act="copy">${svg.copy} نسخ كنص</button><button type="button" class="btn" data-act="csv">تنزيل Excel (CSV)</button></div>
+      <p class="msg" id="xmsg" role="status"></p>
+    </section>`;
+  renderMini(t);
+}
+function renderMini(t) {
+  $('mini').innerHTML = `<div><b id="mk">${f0(t.k)}</b><span>سعرة</span></div><div style="color:var(--pro)"><b id="mp">${f1(t.p)}</b><span>بروتين</span></div><div style="color:var(--car)"><b id="mc">${f1(t.c)}</b><span>كارب</span></div><div style="color:var(--fat)"><b id="mf">${f1(t.f)}</b><span>دهون</span></div>`;
+}
+function renderAll() { renderMain(); renderSide(); }
+/* in-place number refresh while typing (keeps focus) */
+function refreshNumbers() {
+  const d = day(); const t = dayTotal(d);
+  d.meals.forEach(m => {
+    const sec = document.querySelector(`.meal[data-meal="${m.id}"]`); if (!sec) return;
+    sec.querySelector('[data-mchips]').innerHTML = chipsHtml(mealTotal(m));
+    m.items.forEach(it => { const el = sec.querySelector(`.item[data-item="${it.id}"] [data-nums]`); const f = foodById(it.fid); if (el && f) el.innerHTML = numsHtml(macrosOf(f, it), f, it); });
+  });
+  renderSide();
+}
+
+/* ---------- autocomplete ---------- */
+let pick = null; // {input, list, idx, results, parsed}
+function closePick() { if (pick) { pick.el.remove(); pick.input.setAttribute('aria-expanded', 'false'); pick = null; } }
+function openPick(input) {
+  const val = input.value; const results = search(val); const parsed = parseQuery(val);
+  closePick();
+  if (!val.trim()) return;
+  const el = document.createElement('div'); el.className = 'pick'; el.setAttribute('role', 'listbox');
+  const html = results.map((f, i) => `<div class="opt" role="option" aria-selected="${i === 0}" data-i="${i}"><span class="t">${esc(f.n)} <span class="badge ${kindBadge(f)[1]}">${kindBadge(f)[0]}</span></span><span class="m">100 جم: ${f0(f.k)} سعرة · بروتين ${f1(f.p)} · كارب ${f1(f.c)} · دهون ${f1(f.f)}</span></div>`).join('');
+  el.innerHTML = html + `<div class="opt act" role="option" data-new="ai">${results.length ? 'مش دي؟ ' : 'مفيش نتيجة. '}قدّر «${esc(parsed.text)}» بالذكاء الاصطناعي</div><div class="opt act" role="option" data-new="manual">أضف «${esc(parsed.text)}» يدويًا من الملصق</div>`;
+  input.parentElement.appendChild(el); input.setAttribute('aria-expanded', 'true');
+  pick = { input, el, idx: results.length ? 0 : -1, results, parsed };
+}
+function markIdx(i) { if (!pick) return; const opts = pick.el.querySelectorAll('.opt'); pick.idx = Math.max(0, Math.min(opts.length - 1, i)); opts.forEach((o, k) => o.setAttribute('aria-selected', k === pick.idx)); opts[pick.idx].scrollIntoView({ block: 'nearest' }); }
+function choose(f, parsed, itemEl) {
+  const m = day().meals.find(x => x.id === itemEl.dataset.meal); const it = m.items.find(x => x.id === itemEl.dataset.item);
+  it.fid = f.id;
+  if (parsed && parsed.qty != null) {
+    if (parsed.grams || !f.u || !f.u.length) { it.q = parsed.qty; it.u = -1; }
+    else if (parsed.qty >= 20) { it.q = parsed.qty; it.u = -1; }
+    else { it.q = parsed.qty; it.u = 0; }
+  } else { it.q = f.u && f.u.length ? 1 : 100; it.u = f.u && f.u.length ? 0 : -1; }
+  touched(); closePick(); renderAll(); persist(); const q = $('q-' + it.id); if (q) { q.focus(); q.select(); }
+}
+function activateOpt(optEl) {
+  if (!pick) return; const itemEl = pick.input.closest('.item');
+  if (optEl.dataset.new) { const text = pick.parsed.text; closePick(); openFoodDialog(optEl.dataset.new, text, itemEl); return; }
+  choose(pick.results[+optEl.dataset.i], pick.parsed, itemEl);
+}
+
+/* ---------- events ---------- */
+function touched() { if (S.sample) { S.sample = false; } }
+const findMeal = id => day().meals.find(m => m.id === id);
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.top) { S[t.dataset.top] = t.value; touched(); persist(); return; }
+  if (t.dataset.tgt) { S.targets[t.dataset.tgt] = t.value; persist(); const tt = dayTotal(day()); const box = $('targets'); const fx = document.activeElement.id; box.innerHTML = dayTargetsBlock(tt); const el = $(fx); if (el) { el.focus(); const l = el.value.length; try { el.setSelectionRange(l, l); } catch (x) {} } return; }
+  const itemEl = t.closest('.item'); const mealEl = t.closest('.meal');
+  if (t.dataset.k === 'dname') { day().name = t.value; touched(); persist(); document.querySelector('.tab[aria-selected=true]').textContent = t.value || 'يوم ' + (S.active + 1); return; }
+  if (t.dataset.k === 'mname' && mealEl) { findMeal(mealEl.dataset.meal).name = t.value; touched(); persist(); return; }
+  if (!itemEl) return;
+  const m = findMeal(itemEl.dataset.meal), it = m.items.find(x => x.id === itemEl.dataset.item);
+  if (t.dataset.k === 'name') { it.fid = it.fid && foodById(it.fid) && foodById(it.fid).n === t.value ? it.fid : null; openPick(t); return; }
+  if (t.dataset.k === 'q') { it.q = t.value; touched(); persist(); refreshNumbers(); }
+});
+document.addEventListener('change', e => {
+  const t = e.target; if (t.dataset.k !== 'u') return;
+  const itemEl = t.closest('.item'); const m = findMeal(itemEl.dataset.meal), it = m.items.find(x => x.id === itemEl.dataset.item);
+  const f = foodById(it.fid); const oldG = gramsOf(f, it); it.u = parseInt(t.value, 10);
+  // keep the amount the same when switching unit
+  const newUnitG = it.u >= 0 ? f.u[it.u][1] : 1; if (oldG > 0) { const q = oldG / newUnitG; it.q = String(Math.round(q * 100) / 100); $('q-' + it.id).value = it.q; }
+  touched(); persist(); refreshNumbers();
+});
+document.addEventListener('focusin', e => { if (pick && !e.target.closest('.nm')) closePick(); });
+document.addEventListener('mousedown', e => {
+  const opt = e.target.closest('.pick .opt'); if (opt) { e.preventDefault(); activateOpt(opt); return; }
+  if (pick && !e.target.closest('.nm')) closePick();
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (pick && t === pick.input) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); markIdx(pick.idx + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); markIdx(pick.idx - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); const o = pick.el.querySelectorAll('.opt')[Math.max(pick.idx, 0)]; if (o) activateOpt(o); }
+    else if (e.key === 'Escape') closePick();
+    return;
+  }
+  if (e.key === 'Escape' && !$('ov').hidden) closeDialog();
+  if (e.key === 'Enter' && t.dataset && t.dataset.k === 'q') { e.preventDefault(); const m = findMeal(t.closest('.item').dataset.meal); const it = { id: uid(), fid: null, q: '', u: -1 }; m.items.push(it); renderAll(); $('n-' + it.id).focus(); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return; const a = b.dataset.act;
+  const itemEl = b.closest('.item'), mealEl = b.closest('.meal');
+  if (a === 'tab') { S.active = +b.dataset.i; renderAll(); persist(); return; }
+  touched();
+  if (a === 'clear') { S = { sample: false, plan: S.plan, client: S.client, active: 0, targets: S.targets, custom: S.custom, days: [{ id: uid(), name: 'اليوم 1', meals: [{ id: uid(), name: 'الوجبة 1', items: [] }] }] }; renderAll(); persist(); return; }
+  if (a === 'add-day') { S.days.push({ id: uid(), name: 'اليوم ' + (S.days.length + 1), meals: [{ id: uid(), name: 'الوجبة 1', items: [] }] }); S.active = S.days.length - 1; }
+  else if (a === 'dup-day') { const c = JSON.parse(JSON.stringify(day())); c.id = uid(); c.name = (c.name || 'اليوم') + ' (نسخة)'; c.meals.forEach(m => { m.id = uid(); m.items.forEach(i => { i.id = uid(); delete i._open; }); }); S.days.splice(S.active + 1, 0, c); S.active++; }
+  else if (a === 'del-day') { S.days.splice(S.active, 1); S.active = Math.max(0, S.active - 1); }
+  else if (a === 'add-meal') { const m = { id: uid(), name: 'الوجبة ' + (day().meals.length + 1), items: [] }; day().meals.push(m); renderAll(); const n = $('mn-' + m.id); if (n) n.focus(); persist(); return; }
+  else if (a === 'del-meal') { day().meals = day().meals.filter(m => m.id !== mealEl.dataset.meal); }
+  else if (a === 'add-item') { const m = findMeal(mealEl.dataset.meal); const it = { id: uid(), fid: null, q: '', u: -1 }; m.items.push(it); renderAll(); $('n-' + it.id).focus(); persist(); return; }
+  else if (a === 'del-item') { const m = findMeal(itemEl.dataset.meal); m.items = m.items.filter(i => i.id !== itemEl.dataset.item); }
+  else if (a === 'info') { const m = findMeal(itemEl.dataset.meal); const it = m.items.find(i => i.id === itemEl.dataset.item); it._open = !it._open; }
+  else if (a === 'new-food') { openFoodDialog('manual', '', null); return; }
+  else if (a === 'del-custom') {
+    const id = b.dataset.id; const used = S.days.some(d => d.meals.some(m => m.items.some(i => i.fid === id)));
+    if (used) { $('cmsg').textContent = 'الأكلة دي مستخدمة في النظام. احذفها من الوجبات الأول.'; $('cmsg').className = 'msg err'; return; }
+    S.custom = S.custom.filter(c => c.id !== id);
+  }
+  else if (a === 'copy') { exportText(); return; }
+  else if (a === 'csv') { exportCsv(); return; }
+  renderAll(); persist();
+});
+
+/* ---------- custom foods + Claude estimate ---------- */
+let dlg = null;
+function closeDialog() { $('ov').hidden = true; dlg = null; }
+function openFoodDialog(mode, name, itemEl) {
+  dlg = { mode, itemEl, per: '100', est: null };
+  const ai = mode === 'ai';
+  $('modal').innerHTML = `
+    <h2 id="mtitle">أكلة جديدة</h2>
+    <div class="seg" role="group" aria-label="طريقة الإضافة"><button type="button" data-m="ai" aria-pressed="${ai}">تقدير بالذكاء (Claude)</button><button type="button" data-m="manual" aria-pressed="${!ai}">إدخال من الملصق</button></div>
+    <label class="f">اسم الأكلة<input type="text" id="fn" value="${esc(name)}" autocomplete="off"></label>
+    <div id="fbody"></div>
+    <p class="msg" id="fmsg" role="status"></p>
+    <div class="dayhead" style="justify-content:flex-end"><button type="button" class="btn" id="fcancel">إلغاء</button><button type="button" class="btn primary" id="fsave">حفظ وإضافة</button></div>`;
+  $('ov').hidden = false; renderFoodBody(); $('fn').focus();
+}
+function renderFoodBody() {
+  const ai = dlg.mode === 'ai'; const e = dlg.est;
+  const vals = e || {};
+  $('modal').querySelectorAll('[data-m]').forEach(b => b.setAttribute('aria-pressed', (b.dataset.m === dlg.mode)));
+  $('fbody').innerHTML = `
+    ${ai ? `<p class="note" style="margin:0 0 8px">Claude هيقدّر القيم لكل 100 جرام من الأكلة الجاهزة كما تُقدَّم عادة، وتقدر تعدلها قبل الحفظ. ده تقدير مش قياس معملي.</p><button type="button" class="btn primary" id="fest">قدّر القيم</button>` : `
+    <div class="seg" role="group" aria-label="القيم لكل" style="margin-bottom:8px"><button type="button" data-per="100" aria-pressed="${dlg.per === '100'}">لكل 100 جرام</button><button type="button" data-per="s" aria-pressed="${dlg.per === 's'}">لكل حصة</button></div>`}
+    ${(!ai || e) ? `<div class="fields">
+      ${dlg.per === 's' && !ai ? `<label class="f">وزن الحصة (جرام)<input type="text" inputmode="decimal" id="fg" value="${esc(vals.serv || '')}"></label><label class="f">اسم الحصة (اختياري)<input type="text" id="fl" value="" placeholder="مثال: علبة، قطعة"></label>` : ''}
+      <label class="f">السعرات<input type="text" inputmode="decimal" id="fk" value="${vals.k != null ? vals.k : ''}"></label>
+      <label class="f">البروتين (جم)<input type="text" inputmode="decimal" id="fp" value="${vals.p != null ? vals.p : ''}"></label>
+      <label class="f">الكارب (جم)<input type="text" inputmode="decimal" id="fc" value="${vals.c != null ? vals.c : ''}"></label>
+      <label class="f">الدهون (جم)<input type="text" inputmode="decimal" id="ff" value="${vals.f != null ? vals.f : ''}"></label>
+      <label class="f">الألياف (جم، اختياري)<input type="text" inputmode="decimal" id="fi" value="${vals.fi != null ? vals.fi : ''}"></label>
+      ${e && e.servLabel ? `<label class="f">حصة معتادة (جرام)<input type="text" inputmode="decimal" id="fs" value="${e.serv || ''}"></label>` : ''}
+    </div>${e ? `<p class="note" style="margin:8px 0 0"><b>الافتراضات:</b> ${esc(e.assum || '')} · <b>الثقة:</b> ${({ high: 'عالية', medium: 'متوسطة', low: 'منخفضة' })[e.conf] || 'غير محددة'}</p>` : ''}` : ''}`;
+}
+document.addEventListener('click', async e => {
+  const t = e.target;
+  if (t.id === 'fcancel') return closeDialog();
+  if (t.dataset && t.dataset.m && dlg) { dlg.mode = t.dataset.m; dlg.est = null; $('fmsg').textContent = ''; renderFoodBody(); return; }
+  if (t.dataset && t.dataset.per && dlg) { dlg.per = t.dataset.per; const keep = ['fk', 'fp', 'fc', 'ff', 'fi'].map(i => $(i) ? $(i).value : ''); dlg.est = { k: keep[0], p: keep[1], c: keep[2], f: keep[3], fi: keep[4] }; renderFoodBody(); return; }
+  if (t.id === 'fest') return estimate();
+  if (t.id === 'fsave') return saveFood();
+  if (t.id === 'ov') closeDialog();
+});
+async function estimate() {
+  const name = $('fn').value.trim(); const msg = $('fmsg');
+  if (!name) { msg.textContent = 'اكتب اسم الأكلة الأول.'; msg.className = 'msg err'; return; }
+  const btn = $('fest'); btn.disabled = true; msg.textContent = 'بيتم التقدير…'; msg.className = 'msg';
+  try {
+    const sample = await (window.claude && window.claude.use ? window.claude.use('sample') : null);
+    if (!sample) { msg.textContent = 'التقدير بالذكاء مش متاح في العرض ده. استخدم الإدخال من الملصق.'; msg.className = 'msg err'; btn.disabled = false; return; }
+    const prompt = `أنت أخصائي تغذية دقيق. قدّر القيم الغذائية لكل 100 جرام من الأكلة التالية كما تُقدَّم جاهزة للأكل: "${name}".
+- لو الأكلة مصرية فاعتمد على الوصفة الشائعة في مصر، ولو فيها غموض (نيء أم مطبوخ، بالزيت أم بدونه) فاختر الأشيع واذكره في الافتراضات.
+- التزم بقيم واقعية تتفق مع جداول USDA أو جداول الغذاء المعتمدة. لا تبالغ ولا تخمّن أرقامًا مستديرة بلا أساس.
+- السعرات يجب أن تتسق مع الماكروز (بروتين×4 + كارب×4 + دهون×9) في حدود 10%.
+- أرجع JSON فقط بهذا الشكل بدون أي نص آخر:
+{"kcal": number, "protein": number, "carbs": number, "fat": number, "fiber": number, "serving_g": number, "serving_label": string, "assumptions": string, "confidence": "high"|"medium"|"low"}
+- serving_g وزن حصة معتادة بالجرام، و serving_label اسمها بالعربي (مثال: طبق، قطعة، ساندوتش). assumptions جملة قصيرة بالعربي.`;
+    const r = await sample.json(prompt, { modelTier: 'default' });
+    const k = Number(r.kcal), p = Number(r.protein), c = Number(r.carbs), f = Number(r.fat);
+    if (![k, p, c, f].every(x => isFinite(x) && x >= 0)) throw new Error('bad');
+    dlg.est = { k: Math.round(k), p: Math.round(p * 10) / 10, c: Math.round(c * 10) / 10, f: Math.round(f * 10) / 10, fi: isFinite(Number(r.fiber)) ? Math.round(Number(r.fiber) * 10) / 10 : 0, serv: isFinite(Number(r.serving_g)) ? Math.round(Number(r.serving_g)) : '', servLabel: r.serving_label || 'حصة', assum: r.assumptions || '', conf: r.confidence };
+    renderFoodBody(); msg.textContent = 'راجع الأرقام وعدّلها لو لازم قبل الحفظ.'; msg.className = 'msg warn';
+  } catch (err) {
+    msg.textContent = err && err.code === 'not_granted' ? 'لازم توافق على استخدام Claude علشان التقدير يشتغل.' : 'ما قدرتش أقدّر الأكلة دلوقتي. جرّب تاني أو أدخل القيم يدويًا.';
+    msg.className = 'msg err'; const b2 = $('fest'); if (b2) b2.disabled = false;
+  }
+}
+function saveFood() {
+  const msg = $('fmsg'); const name = $('fn').value.trim();
+  if (!name) { msg.textContent = 'اكتب اسم الأكلة.'; msg.className = 'msg err'; return; }
+  const ai = dlg.mode === 'ai'; if (ai && !dlg.est) { msg.textContent = 'اضغط «قدّر القيم» الأول.'; msg.className = 'msg err'; return; }
+  const g = v => $(v) ? num($(v).value) : NaN;
+  let k = g('fk'), p = g('fp'), c = g('fc'), f = g('ff'), fi = g('fi'); const perS = dlg.per === 's' && !ai; let sg = perS ? g('fg') : NaN;
+  if (![p, c, f].every(isFinite)) { msg.textContent = 'اكتب البروتين والكارب والدهون (ممكن صفر).'; msg.className = 'msg err'; return; }
+  if (perS && !(sg > 0)) { msg.textContent = 'اكتب وزن الحصة بالجرام.'; msg.className = 'msg err'; return; }
+  const est = 4 * p + 4 * c + 9 * f;
+  if (!isFinite(k)) k = est;
+  if (est > 20 && Math.abs(k - est) / est > 0.25 && !dlg.warned) { dlg.warned = true; msg.textContent = `السعرات (${f0(k)}) بعيدة عن حساب الماكروز (≈ ${f0(est)}). راجع الأرقام، أو اضغط حفظ تاني لو متأكد منها.`; msg.className = 'msg warn'; return; }
+  const mul = perS ? 100 / sg : 1; fi = isFinite(fi) ? fi : 0;
+  const food = withIdx({ id: 'c' + uid(), n: name, g: 'أكلاتي', al: '', k: k * mul, p: p * mul, c: c * mul, f: f * mul, fi: fi * mul, u: [], kind: ai ? 'ai' : 'custom', src: ai ? 'تقدير Claude (غير معملي)' : (perS ? 'ملصق المنتج (لكل حصة)' : 'إدخال يدوي (لكل 100 جم)'), nt: ai ? (dlg.est.assum || '') : '' });
+  if (perS) food.u = [[($('fl') && $('fl').value.trim()) || 'حصة', sg, false]];
+  else if (ai) { const s = g('fs'); if (s > 0) food.u = [[dlg.est.servLabel || 'حصة', s, true]]; }
+  ['k', 'p', 'c', 'f', 'fi'].forEach(x => food[x] = Math.round(food[x] * 100) / 100);
+  S.custom.push(food); touched();
+  const itemEl = dlg.itemEl; closeDialog();
+  if (itemEl) choose(food, null, itemEl); else { renderAll(); persist(); }
+}
+
+/* ---------- export ---------- */
+function planRows() {
+  const rows = [];
+  S.days.forEach(d => d.meals.forEach(m => m.items.forEach(it => {
+    const f = foodById(it.fid); if (!f) return; const u = unitOf(f, it); const t = macrosOf(f, it);
+    rows.push({ d: d.name, m: m.name, n: f.n, q: it.q, u: u ? u[0] : 'جرام', t, src: f.src });
+  })));
+  return rows;
+}
+function msgX(txt, cls) { const el = $('xmsg'); if (el) { el.textContent = txt; el.className = 'msg ' + (cls || ''); } }
+function textPlan() {
+  const out = []; if (S.plan) out.push(S.plan); if (S.client) out.push('العميل: ' + S.client); if (out.length) out.push('');
+  S.days.forEach(d => {
+    out.push('■ ' + (d.name || 'يوم')); const dt = dayTotal(d);
+    d.meals.forEach(m => {
+      if (!m.items.some(i => foodById(i.fid))) return; const mt = mealTotal(m); out.push('— ' + m.name + ` (${f0(mt.k)} سعرة)`);
+      m.items.forEach(it => { const f = foodById(it.fid); if (!f) return; const u = unitOf(f, it); const t = macrosOf(f, it); out.push(`  • ${f.n}: ${it.q} ${u ? u[0] : 'جم'} → ${f0(t.k)} سعرة | ب ${f1(t.p)} | ك ${f1(t.c)} | د ${f1(t.f)}`); });
+    });
+    out.push(`الإجمالي: ${f0(dt.k)} سعرة | بروتين ${f1(dt.p)} جم | كارب ${f1(dt.c)} جم | دهون ${f1(dt.f)} جم`, '');
+  });
+  return out.join('\n').trim();
+}
+async function exportText() {
+  const txt = textPlan();
+  try { await navigator.clipboard.writeText(txt); msgX('تم النسخ.', 'ok'); }
+  catch (e) { const ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (x) {} ta.remove(); msgX(ok ? 'تم النسخ.' : 'المتصفح منع النسخ. حدّد النص يدويًا من التنزيل CSV.', ok ? 'ok' : 'err'); }
+}
+async function exportCsv() {
+  const rows = planRows(); if (!rows.length) return msgX('مفيش أكلات تتصدّر لسه.', 'err');
+  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const head = ['اليوم', 'الوجبة', 'الأكلة', 'الكمية', 'الوحدة', 'الجرامات', 'السعرات', 'البروتين', 'الكارب', 'الدهون', 'الألياف', 'المصدر'];
+  const lines = [head.map(q).join(',')].concat(rows.map(r => [r.d, r.m, r.n, r.q, r.u, f1(r.t.g), f0(r.t.k), f1(r.t.p), f1(r.t.c), f1(r.t.f), f1(r.t.fi), r.src].map(q).join(',')));
+  const data = '﻿' + lines.join('\r\n');
+  try {
+    const dl = await (window.claude && window.claude.use ? window.claude.use('downloads') : null);
+    if (!dl) return msgX('التنزيل مش متاح في العرض ده. استخدم «نسخ كنص».', 'err');
+    await dl.save({ filename: (S.plan || 'diet-plan').replace(/[\\/:*?"<>|]/g, '') + '.csv', data });
+    msgX('تم حفظ الملف.', 'ok');
+  } catch (e) { msgX(e && e.code === 'declined' ? 'اتلغى التنزيل.' : 'ما قدرتش أحفظ الملف.', e && e.code === 'declined' ? '' : 'err'); }
+}
+
+/* ---------- boot ---------- */
+renderAll();
+window.__t = { FOODS: BASE, search, S: () => S, dayTotal, macrosOf, foodById, norm, parseQuery };
+})();
+</script>
+
+</body></html>
